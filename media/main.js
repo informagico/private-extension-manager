@@ -1,11 +1,32 @@
 (function () {
 	const vscode = acquireVsCodeApi();
 
+	// Preserve search state across refreshes
+	let currentSearchTerm = "";
+
 	// Get references to DOM elements
 	const refreshBtn = document.getElementById("refresh-btn");
 	const addBtn = document.getElementById("add-btn");
 	const searchInput = document.getElementById("search-input");
 	const itemsContainer = document.querySelector(".items-container");
+
+	// Restore search state on load
+	function restoreSearchState() {
+		const state = vscode.getState();
+		if (state && state.searchTerm) {
+			currentSearchTerm = state.searchTerm;
+			if (searchInput) {
+				searchInput.value = currentSearchTerm;
+				filterItems(currentSearchTerm);
+			}
+		}
+	}
+
+	// Save search state
+	function saveSearchState(searchTerm) {
+		currentSearchTerm = searchTerm;
+		vscode.setState({ searchTerm: searchTerm });
+	}
 
 	// Set up event listeners
 	if (refreshBtn) {
@@ -24,10 +45,11 @@
 		});
 	}
 
-	// Search functionality
+	// Search functionality with state preservation
 	if (searchInput) {
 		searchInput.addEventListener("input", (e) => {
 			const searchTerm = e.target.value.toLowerCase();
+			saveSearchState(searchTerm);
 			filterItems(searchTerm);
 		});
 	}
@@ -36,6 +58,14 @@
 	setupItemEventListeners();
 
 	function setupItemEventListeners() {
+		// Remove existing listeners to prevent duplicates
+		const existingItems = document.querySelectorAll(".item");
+		existingItems.forEach((item) => {
+			// Clone node to remove all event listeners
+			const newItem = item.cloneNode(true);
+			item.parentNode.replaceChild(newItem, item);
+		});
+
 		// Item click handlers
 		document.querySelectorAll(".item").forEach((item) => {
 			const itemId = item.getAttribute("data-item-id");
@@ -132,15 +162,18 @@
 				item.querySelector(".author-name")?.textContent?.toLowerCase() || "";
 
 			const isMatch =
+				!searchTerm || // Show all if no search term
 				title.includes(searchTerm) ||
 				description.includes(searchTerm) ||
 				author.includes(searchTerm);
 
 			if (isMatch) {
-				item.style.display = "block";
+				item.style.display = "flex"; // Use flex instead of block for proper layout
+				item.style.visibility = "visible";
 				visibleCount++;
 			} else {
 				item.style.display = "none";
+				item.style.visibility = "hidden";
 			}
 		});
 
@@ -156,8 +189,8 @@
 			emptyState.className = "empty-state";
 			emptyState.innerHTML = `
                 <div class="codicon codicon-search"></div>
-                <div>No items found</div>
-                <div style="font-size: 11px; margin-top: 4px;">Try adjusting your search terms</div>
+                <div>No extensions found</div>
+                <div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">Try adjusting your search terms</div>
             `;
 			itemsContainer.appendChild(emptyState);
 		} else if (!show && emptyState) {
@@ -179,6 +212,7 @@
 		// Escape to clear search
 		if (e.key === "Escape" && document.activeElement === searchInput) {
 			searchInput.value = "";
+			saveSearchState("");
 			filterItems("");
 			searchInput.blur();
 		}
@@ -201,11 +235,26 @@
 		const message = event.data;
 		switch (message.command) {
 			case "refresh":
-				// Re-setup event listeners after refresh
-				setTimeout(setupItemEventListeners, 100);
+				// Re-setup event listeners after refresh and restore search
+				setTimeout(() => {
+					setupItemEventListeners();
+					restoreSearchState();
+				}, 50);
 				break;
 		}
 	});
+
+	// Initialize on load
+	document.addEventListener("DOMContentLoaded", () => {
+		restoreSearchState();
+	});
+
+	// Also restore immediately if DOM is already loaded
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", restoreSearchState);
+	} else {
+		restoreSearchState();
+	}
 
 	// Add some visual feedback for actions
 	function showToast(message, type = "info") {
@@ -239,7 +288,11 @@
 		// Fade out and remove
 		setTimeout(() => {
 			toast.style.opacity = "0";
-			setTimeout(() => document.body.removeChild(toast), 300);
+			setTimeout(() => {
+				if (document.body.contains(toast)) {
+					document.body.removeChild(toast);
+				}
+			}, 300);
 		}, 2000);
 	}
 
@@ -248,5 +301,7 @@
 		filterItems,
 		showToast,
 		setupItemEventListeners,
+		restoreSearchState,
+		currentSearchTerm: () => currentSearchTerm,
 	};
 })();
