@@ -1,56 +1,29 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PrivateExtensionsSidebarProvider = void 0;
-// src/sidebarProvider.ts
 const vscode = require("vscode");
+const storageProvider_1 = require("./storageProvider");
 class PrivateExtensionsSidebarProvider {
-    constructor(_extensionUri) {
+    constructor(_extensionUri, _context) {
         this._extensionUri = _extensionUri;
-        this._items = [
-            {
-                id: '1',
-                title: '.NET Install Tool',
-                description: 'This extension installs and manages different versions of the .NET SDK and runtime.',
-                icon: 'https://fastly.picsum.photos/id/634/128/128.jpg?hmac=_0_bD8fHB5Rfnx1q1rk6wVpggrnLnT1GCfjCcHoUUf8',
-                author: 'Microsoft',
-                isInstalled: true,
-                hasUpdate: true
-            },
-            {
-                id: '2',
-                title: 'Auto Comment Blocks',
-                description: 'Provides block comment completion for Javadoc-style multi-line comments.',
-                icon: null,
-                author: 'kky',
-                isInstalled: false
-            },
-            {
-                id: '3',
-                title: 'Better C++ Syntax',
-                description: 'The bleeding edge of the C++ syntax',
-                icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
-                author: 'Jeff Hykin',
-                isInstalled: true,
-                hasUpdate: false
-            },
-            {
-                id: '4',
-                title: 'C/C++',
-                description: 'C/C++ IntelliSense, debugging, and code browsing.',
-                icon: null,
-                author: 'Microsoft',
-                isInstalled: false
-            },
-            {
-                id: '5',
-                title: 'C# Extensions',
-                description: 'C# IDE Extensions for VSCode',
-                icon: 'data:image/jpeg;base64,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',
-                author: 'JosKreativ',
-                isInstalled: true,
-                hasUpdate: true
+        this._context = _context;
+        this._items = [];
+        this._storageProvider = new storageProvider_1.StorageProvider(_context);
+        // Listen for storage changes
+        this._storageProvider.onDidChange(extensions => {
+            this._items = this.convertExtensionsToSidebarItems(extensions);
+            this.refresh();
+        });
+        // Initialize with existing extensions
+        this.loadExtensions();
+        // Setup auto-refresh if enabled
+        this.setupAutoRefresh();
+        // Watch for configuration changes
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('privateExtensionsSidebar.scanInterval')) {
+                this.setupAutoRefresh();
             }
-        ];
+        });
     }
     resolveWebviewView(webviewView, context, _token) {
         this._view = webviewView;
@@ -65,7 +38,7 @@ class PrivateExtensionsSidebarProvider {
                     this._handleItemClick(message.itemId);
                     break;
                 case 'deleteItem':
-                    this._deleteItem(message.itemId);
+                    this._uninstallExtension(message.itemId);
                     break;
                 case 'toggleStatus':
                     this._toggleItemStatus(message.itemId);
@@ -74,74 +47,218 @@ class PrivateExtensionsSidebarProvider {
                     this._openInEditor(message.itemId);
                     break;
                 case 'installItem':
-                    this._installItem(message.itemId);
+                    this._installExtension(message.itemId);
                     break;
                 case 'updateItem':
-                    this._updateItem(message.itemId);
+                    this._updateExtension(message.itemId);
+                    break;
+                case 'showInFolder':
+                    this._showInFolder(message.itemId);
                     break;
             }
         }, undefined, []);
     }
-    refresh() {
+    async refresh() {
+        await this.loadExtensions();
         if (this._view) {
             this._view.webview.html = this._getHtmlForWebview(this._view.webview);
         }
     }
-    addItem() {
-        const newItem = {
-            id: Date.now().toString(),
-            title: `New Extension ${this._items.length + 1}`,
-            description: 'This is a new extension added to the marketplace',
-            icon: null,
-            author: 'Developer',
-            isInstalled: false
+    async addDirectory() {
+        const options = {
+            canSelectMany: true,
+            canSelectFiles: false,
+            canSelectFolders: true,
+            openLabel: 'Select VSIX Directories'
         };
-        this._items.unshift(newItem);
-        this.refresh();
+        const folderUris = await vscode.window.showOpenDialog(options);
+        if (folderUris && folderUris.length > 0) {
+            const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+            const currentDirs = config.get('vsixDirectories', []);
+            const newDirs = folderUris.map(uri => uri.fsPath);
+            const updatedDirs = [...new Set([...currentDirs, ...newDirs])];
+            await config.update('vsixDirectories', updatedDirs, vscode.ConfigurationTarget.Global);
+            vscode.window.showInformationMessage(`Added ${newDirs.length} director${newDirs.length === 1 ? 'y' : 'ies'} to scan list`);
+            await this.refresh();
+        }
+    }
+    async scanDirectories() {
+        try {
+            vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: "Scanning VSIX directories...",
+                cancellable: false
+            }, async (progress) => {
+                progress.report({ increment: 0 });
+                const extensions = await this._storageProvider.refresh();
+                progress.report({ increment: 100 });
+                vscode.window.showInformationMessage(`Found ${extensions.length} extension${extensions.length === 1 ? '' : 's'}`);
+            });
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Error scanning directories: ${error}`);
+        }
+    }
+    dispose() {
+        if (this._refreshInterval) {
+            clearInterval(this._refreshInterval);
+        }
+        this._storageProvider.dispose();
+    }
+    async loadExtensions() {
+        try {
+            const extensions = await this._storageProvider.getAllExtensions();
+            this._items = this.convertExtensionsToSidebarItems(extensions);
+        }
+        catch (error) {
+            console.error('Error loading extensions:', error);
+            vscode.window.showErrorMessage(`Error loading extensions: ${error}`);
+            this._items = [];
+        }
+    }
+    convertExtensionsToSidebarItems(extensions) {
+        return extensions.map(ext => ({
+            id: ext.id,
+            title: ext.title,
+            description: ext.description,
+            icon: ext.icon || null,
+            author: ext.author,
+            isInstalled: ext.isInstalled,
+            hasUpdate: ext.hasUpdate,
+            version: ext.version,
+            publisher: ext.publisher,
+            filePath: ext.filePath,
+            fileSize: ext.fileSize,
+            lastModified: ext.lastModified,
+            categories: ext.categories,
+            keywords: ext.keywords
+        }));
+    }
+    setupAutoRefresh() {
+        if (this._refreshInterval) {
+            clearInterval(this._refreshInterval);
+            this._refreshInterval = undefined;
+        }
+        const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+        const interval = config.get('scanInterval', 30);
+        if (interval > 0) {
+            this._refreshInterval = setInterval(() => {
+                this.refresh();
+            }, interval * 1000);
+        }
     }
     _handleItemClick(itemId) {
         const item = this._items.find(i => i.id === itemId);
         if (item) {
-            vscode.window.showInformationMessage(`Clicked on: ${item.title}`);
+            // Show extension details
+            const info = [
+                `**${item.title}** v${item.version}`,
+                `Publisher: ${item.publisher}`,
+                `Author: ${item.author}`,
+                ``,
+                item.description,
+                ``,
+                `Status: ${item.isInstalled ? 'Installed' : 'Not Installed'}`,
+                item.hasUpdate ? '⚠️ Update Available' : '',
+                ``,
+                `File: ${item.filePath}`,
+                item.fileSize ? `Size: ${this.formatFileSize(item.fileSize)}` : '',
+                item.lastModified ? `Modified: ${item.lastModified.toLocaleString()}` : ''
+            ].filter(line => line !== '').join('\n');
+            vscode.window.showInformationMessage(`Extension Details`, {
+                detail: info,
+                modal: false
+            });
         }
     }
-    _deleteItem(itemId) {
-        this._items = this._items.filter(item => item.id !== itemId);
-        this.refresh();
+    async _installExtension(itemId) {
+        const extension = await this._storageProvider.getExtensionById(itemId);
+        if (extension) {
+            const success = await this._storageProvider.installExtension(extension);
+            if (success) {
+                await this.refresh();
+            }
+        }
+    }
+    async _updateExtension(itemId) {
+        // For updates, we reinstall the extension
+        await this._installExtension(itemId);
+    }
+    async _uninstallExtension(itemId) {
+        const item = this._items.find(i => i.id === itemId);
+        if (item && item.isInstalled) {
+            const confirm = await vscode.window.showWarningMessage(`Are you sure you want to uninstall "${item.title}"?`, { modal: true }, 'Uninstall');
+            if (confirm === 'Uninstall') {
+                const success = await this._storageProvider.uninstallExtension(itemId);
+                if (success) {
+                    await this.refresh();
+                }
+            }
+        }
     }
     _toggleItemStatus(itemId) {
-        vscode.window.showInformationMessage('Toggle action triggered');
-        this.refresh();
-    }
-    _installItem(itemId) {
         const item = this._items.find(i => i.id === itemId);
-        if (item && !item.isInstalled) {
-            item.isInstalled = true;
-            this.refresh();
-            vscode.window.showInformationMessage(`${item.title} has been installed!`);
-        }
-    }
-    _updateItem(itemId) {
-        const item = this._items.find(i => i.id === itemId);
-        if (item && item.isInstalled && item.hasUpdate) {
-            item.hasUpdate = false;
-            this.refresh();
-            vscode.window.showInformationMessage(`${item.title} has been updated!`);
+        if (item) {
+            if (item.isInstalled) {
+                this._uninstallExtension(itemId);
+            }
+            else {
+                this._installExtension(itemId);
+            }
         }
     }
     _openInEditor(itemId) {
         const item = this._items.find(i => i.id === itemId);
         if (item) {
+            const content = [
+                `# ${item.title}`,
+                ``,
+                `**Version:** ${item.version}`,
+                `**Publisher:** ${item.publisher}`,
+                `**Author:** ${item.author}`,
+                `**Status:** ${item.isInstalled ? 'Installed' : 'Not Installed'}`,
+                item.hasUpdate ? `**Update Available:** Yes` : '',
+                ``,
+                `## Description`,
+                item.description,
+                ``,
+                `## File Information`,
+                `- **Path:** ${item.filePath}`,
+                item.fileSize ? `- **Size:** ${this.formatFileSize(item.fileSize)}` : '',
+                item.lastModified ? `- **Modified:** ${item.lastModified.toLocaleString()}` : '',
+                ``,
+                item.categories && item.categories.length > 0 ? `## Categories` : '',
+                item.categories && item.categories.length > 0 ? item.categories.map(cat => `- ${cat}`).join('\n') : '',
+                ``,
+                item.keywords && item.keywords.length > 0 ? `## Keywords` : '',
+                item.keywords && item.keywords.length > 0 ? item.keywords.join(', ') : ''
+            ].filter(line => line !== '').join('\n');
             vscode.workspace.openTextDocument({
-                content: `# ${item.title}\n\n${item.description}\n\nAuthor: ${item.author}`,
+                content,
                 language: 'markdown'
             }).then(doc => {
                 vscode.window.showTextDocument(doc);
             });
         }
     }
+    _showInFolder(itemId) {
+        const item = this._items.find(i => i.id === itemId);
+        if (item && item.filePath) {
+            vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(item.filePath));
+        }
+    }
+    formatFileSize(bytes) {
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        if (bytes === 0)
+            return '0 Bytes';
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+    }
     _getSortedItems() {
-        return [...this._items].sort((a, b) => {
+        const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+        const sortBy = config.get('sortBy', 'name');
+        const sortOrder = config.get('sortOrder', 'ascending');
+        const sortedItems = [...this._items].sort((a, b) => {
             // Priority 1: Items with updates available (installed + hasUpdate)
             const aHasUpdate = a.isInstalled && a.hasUpdate;
             const bHasUpdate = b.isInstalled && b.hasUpdate;
@@ -161,9 +278,54 @@ class PrivateExtensionsSidebarProvider {
                 return 1;
             if (a.isInstalled && !b.isInstalled)
                 return -1;
-            // Within same category, sort alphabetically by title
-            return a.title.localeCompare(b.title);
+            // Within same category, sort by configured criteria
+            let comparison = 0;
+            switch (sortBy) {
+                case 'name':
+                    comparison = a.title.localeCompare(b.title);
+                    break;
+                case 'author':
+                    comparison = a.author.localeCompare(b.author);
+                    break;
+                case 'lastModified':
+                    if (a.lastModified && b.lastModified) {
+                        comparison = a.lastModified.getTime() - b.lastModified.getTime();
+                    }
+                    else if (a.lastModified) {
+                        comparison = -1;
+                    }
+                    else if (b.lastModified) {
+                        comparison = 1;
+                    }
+                    break;
+                case 'fileSize':
+                    comparison = (a.fileSize || 0) - (b.fileSize || 0);
+                    break;
+                case 'version':
+                    if (a.version && b.version) {
+                        comparison = this.compareVersions(a.version, b.version);
+                    }
+                    break;
+                default:
+                    comparison = a.title.localeCompare(b.title);
+            }
+            return sortOrder === 'descending' ? -comparison : comparison;
         });
+        return sortedItems;
+    }
+    compareVersions(version1, version2) {
+        const v1Parts = version1.split('.').map(Number);
+        const v2Parts = version2.split('.').map(Number);
+        const maxLength = Math.max(v1Parts.length, v2Parts.length);
+        for (let i = 0; i < maxLength; i++) {
+            const v1Part = v1Parts[i] || 0;
+            const v2Part = v2Parts[i] || 0;
+            if (v1Part > v2Part)
+                return 1;
+            if (v1Part < v2Part)
+                return -1;
+        }
+        return 0;
     }
     _getHtmlForWebview(webview) {
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js'));
@@ -171,6 +333,9 @@ class PrivateExtensionsSidebarProvider {
         const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vscode.css'));
         const styleMainUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.css'));
         const nonce = getNonce();
+        const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+        const showFileSize = config.get('showFileSize', false);
+        const showLastModified = config.get('showLastModified', false);
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
@@ -185,11 +350,19 @@ class PrivateExtensionsSidebarProvider {
             <body>
                 <div class="container">
                     <div class="search-container">
-                        <input type="text" id="search-input" placeholder="Search in Private Marketplace" />
+                        <input type="text" id="search-input" placeholder="Search Extensions in Private Marketplace" />
                     </div>
                     
                     <div class="items-container">
-                        ${this._getSortedItems().map(item => `
+                        ${this._getSortedItems().length === 0 ? `
+                            <div class="empty-state">
+                                <div class="codicon codicon-folder-opened"></div>
+                                <div>No extensions found</div>
+                                <div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">
+                                    Configure directories in settings or click the + button to add directories
+                                </div>
+                            </div>
+                        ` : this._getSortedItems().map(item => `
                             <div class="item ${item.isInstalled ? 'installed' : 'not-installed'}" data-item-id="${item.id}" tabindex="0">
                                 <div class="item-icon-container">
                                     <div class="item-main-icon">
@@ -201,6 +374,11 @@ class PrivateExtensionsSidebarProvider {
                                             </div>
                                         `}
                                     </div>
+                                    ${item.hasUpdate ? `
+                                        <div class="update-badge" title="Update Available">
+                                            <span class="codicon codicon-arrow-up"></span>
+                                        </div>
+                                    ` : ''}
                                 </div>
                                 <div class="item-content">
                                     <div class="item-header">
@@ -213,26 +391,55 @@ class PrivateExtensionsSidebarProvider {
                                                 <button class="action-btn open-btn" title="Open in Editor">
                                                     <span class="codicon codicon-go-to-file"></span>
                                                 </button>
+                                                <button class="action-btn show-folder-btn" title="Show in Folder">
+                                                    <span class="codicon codicon-folder-opened"></span>
+                                                </button>
                                                 <button class="action-btn delete-btn" title="Uninstall">
                                                     <span class="codicon codicon-trash"></span>
                                                 </button>
                                             </div>
-                                        ` : ''}
+                                        ` : `
+                                            <div class="item-actions">
+                                                <button class="action-btn show-folder-btn" title="Show in Folder">
+                                                    <span class="codicon codicon-folder-opened"></span>
+                                                </button>
+                                            </div>
+                                        `}
                                     </div>
                                     <div class="item-description">${item.description}</div>
                                     <div class="item-meta-wrapper">
-                                        <div class="item-author">
-                                            <span class="author-name">${item.author}</span>
+                                        <div class="item-meta">
+                                            <div class="item-author">
+                                                <span class="author-name">${item.author}</span>
+                                                ${item.version ? `<span class="version">v${item.version}</span>` : ''}
+                                            </div>
+                                            ${showFileSize && item.fileSize ? `
+                                                <div class="file-info">
+                                                    <span class="file-size">${this.formatFileSize(item.fileSize)}</span>
+                                                </div>
+                                            ` : ''}
+                                            ${showLastModified && item.lastModified ? `
+                                                <div class="file-info">
+                                                    <span class="last-modified">${item.lastModified.toLocaleDateString()}</span>
+                                                </div>
+                                            ` : ''}
                                         </div>
                                         ${!item.isInstalled ? `
                                             <button class="install-btn" data-item-id="${item.id}">
+                                                <span class="codicon codicon-cloud-download"></span>
                                                 Install
                                             </button>
                                         ` : item.hasUpdate ? `
                                             <button class="update-btn" data-item-id="${item.id}">
+                                                <span class="codicon codicon-arrow-up"></span>
                                                 Update
                                             </button>
-                                        ` : ''}
+                                        ` : `
+                                            <div class="installed-badge">
+                                                <span class="codicon codicon-check"></span>
+                                                Installed
+                                            </div>
+                                        `}
                                     </div>
                                 </div>
                             </div>
