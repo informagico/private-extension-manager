@@ -185,7 +185,7 @@ class PrivateExtensionsSidebarProvider {
             <body>
                 <div class="container">
                     <div class="search-container">
-                        <input type="text" id="search-input" placeholder="Search Extensions in Private Marketplace" />
+                        <input type="text" id="search-input" placeholder="Search in Private Marketplace" />
                     </div>
                     
                     <div class="items-container">
