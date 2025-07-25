@@ -49,11 +49,6 @@
         "command": "privateExtensionsSidebar.openSettings",
         "title": "Open Settings",
         "icon": "$(gear)"
-      },
-      {
-        "command": "privateExtensionsSidebar.scanDirectories",
-        "title": "Scan Directories",
-        "icon": "$(search)"
       }
     ],
     "menus": {
@@ -69,14 +64,9 @@
           "group": "navigation"
         },
         {
-          "command": "privateExtensionsSidebar.scanDirectories",
-          "when": "view == privateExtensionsSidebar.sidebarView",
-          "group": "navigation@2"
-        },
-        {
           "command": "privateExtensionsSidebar.openSettings",
           "when": "view == privateExtensionsSidebar.sidebarView",
-          "group": "navigation@3"
+          "group": "navigation@2"
         }
       ]
     },

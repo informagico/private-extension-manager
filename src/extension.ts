@@ -14,19 +14,13 @@ export function activate(context: vscode.ExtensionContext) {
 	// Register commands
 	context.subscriptions.push(
 		vscode.commands.registerCommand('privateExtensionsSidebar.refresh', async () => {
-			await sidebarProvider.refresh();
+			await sidebarProvider.scanDirectories();
 		})
 	);
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('privateExtensionsSidebar.addItem', async () => {
 			await sidebarProvider.addDirectory();
-		})
-	);
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand('privateExtensionsSidebar.scanDirectories', async () => {
-			await sidebarProvider.scanDirectories();
 		})
 	);
 
@@ -56,7 +50,7 @@ export function activate(context: vscode.ExtensionContext) {
 					`Updated VSIX directories. Found ${newDirs.length} director${newDirs.length === 1 ? 'y' : 'ies'}.`
 				);
 
-				await sidebarProvider.refresh();
+				await sidebarProvider.scanDirectories();
 			}
 		})
 	);

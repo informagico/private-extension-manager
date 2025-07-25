@@ -49,7 +49,7 @@
 	if (searchInput) {
 		searchInput.addEventListener("input", (e) => {
 			const searchTerm = e.target.value.toLowerCase();
-			saveSearchState(searchTem);
+			saveSearchState(searchTerm);
 			filterItems(searchTerm);
 		});
 	}
@@ -267,13 +267,6 @@
 		if ((e.ctrlKey || e.metaKey) && e.key === "n") {
 			e.preventDefault();
 			vscode.postMessage({ command: "addItem" });
-		}
-
-		// Ctrl/Cmd + Shift + S to scan directories
-		if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
-			e.preventDefault();
-			showLoadingState(true);
-			vscode.postMessage({ command: "scanDirectories" });
 		}
 	});
 
