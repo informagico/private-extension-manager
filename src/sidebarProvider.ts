@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { StorageProvider, ExtensionInfo } from './storageProvider';
+import { ExtensionDetailsProvider } from './extensionDetailsProvider';
 
 interface SidebarItem {
 	id: string;
@@ -27,9 +28,11 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 	private _refreshInterval?: NodeJS.Timeout;
 	private _loadingPromise?: Promise<void>; // Track loading state
 	private _isScanning = false; // Prevent concurrent scans
+	private _detailsProvider: ExtensionDetailsProvider;
 
 	constructor(private readonly _extensionUri: vscode.Uri, private readonly _context: vscode.ExtensionContext) {
 		this._storageProvider = new StorageProvider(_context);
+		this._detailsProvider = new ExtensionDetailsProvider(_extensionUri);
 
 		// Listen for storage changes and automatically refresh webview
 		this._storageProvider.onDidChange(extensions => {
@@ -86,10 +89,10 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		}
 
 		webviewView.webview.onDidReceiveMessage(
-			message => {
+			async message => {
 				switch (message.command) {
 					case 'itemClicked':
-						this._handleItemClick(message.itemId);
+						await this._handleItemClick(message.itemId);
 						break;
 					case 'deleteItem':
 						this._uninstallExtension(message.itemId);
@@ -307,29 +310,15 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		}
 	}
 
-	private _handleItemClick(itemId: string): void {
+	private async _handleItemClick(itemId: string): Promise<void> {
 		const item = this._items.find(i => i.id === itemId);
-		if (item) {
-			// Show extension details
-			const info = [
-				`**${item.title}** v${item.version}`,
-				`Publisher: ${item.publisher}`,
-				`Author: ${item.author}`,
-				``,
-				item.description,
-				``,
-				`Status: ${item.isInstalled ? 'Installed' : 'Not Installed'}`,
-				item.hasUpdate ? '⚠️ Update Available' : '',
-				``,
-				`File: ${item.filePath}`,
-				item.fileSize ? `Size: ${this.formatFileSize(item.fileSize)}` : '',
-				item.lastModified ? `Modified: ${item.lastModified.toLocaleString()}` : ''
-			].filter(line => line !== '').join('\n');
-
-			vscode.window.showInformationMessage(`Extension Details`, {
-				detail: info,
-				modal: false
-			});
+		if (item && item.filePath) {
+			try {
+				await this._detailsProvider.showExtensionDetails(item.filePath);
+			} catch (error) {
+				console.error('Error showing extension details:', error);
+				vscode.window.showErrorMessage(`Error showing extension details: ${error}`);
+			}
 		}
 	}
 

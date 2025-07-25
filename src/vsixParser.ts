@@ -184,6 +184,60 @@ export class VsixParser {
 		}
 	}
 
+	async extractReadme(): Promise<string | null> {
+		if (!this.fileBuffer || !this.centralDirectory.length) {
+			await this.parseCentralDirectory();
+		}
+
+		// Look for README.md in common locations
+		const readmeEntry = this.centralDirectory.find(entry => {
+			const fileName = entry.fileName.toLowerCase();
+			return fileName === 'readme.md' || 
+				   fileName === 'extension/readme.md' || 
+				   fileName.endsWith('/readme.md');
+		});
+
+		if (!readmeEntry) {
+			return null;
+		}
+
+		try {
+			const readmeBuffer = await this.extractFile(readmeEntry);
+			return readmeBuffer.toString('utf8');
+		} catch (error) {
+			console.error('Error extracting README.md:', error);
+			return null;
+		}
+	}
+
+	async extractChangelog(): Promise<string | null> {
+		if (!this.fileBuffer || !this.centralDirectory.length) {
+			await this.parseCentralDirectory();
+		}
+
+		// Look for CHANGELOG.md in common locations
+		const changelogEntry = this.centralDirectory.find(entry => {
+			const fileName = entry.fileName.toLowerCase();
+			return fileName === 'changelog.md' || 
+				   fileName === 'extension/changelog.md' || 
+				   fileName.endsWith('/changelog.md') ||
+				   fileName === 'changes.md' ||
+				   fileName === 'extension/changes.md';
+		});
+
+		if (!changelogEntry) {
+			return null;
+		}
+
+		try {
+			const changelogBuffer = await this.extractFile(changelogEntry);
+			return changelogBuffer.toString('utf8');
+		} catch (error) {
+			console.error('Error extracting CHANGELOG.md:', error);
+			return null;
+		}
+	}
+
 	private async parseCentralDirectory(): Promise<void> {
 		if (!this.fileBuffer) {
 			throw new Error('File buffer not loaded');
