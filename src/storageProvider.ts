@@ -5,8 +5,6 @@ import { promisify } from 'util';
 import { VsixParser, VsixPackageJson, VsixManifest } from './vsixParser';
 
 const readdir = promisify(fs.readdir);
-const stat = promisify(fs.stat);
-const access = promisify(fs.access);
 
 export interface ExtensionInfo {
 	id: string;
@@ -34,6 +32,10 @@ export interface ExtensionInfo {
 		color?: string;
 		theme?: string;
 	};
+	tags?: string[];
+	galleryFlags?: string[];
+	targetPlatforms?: string[];
+	language?: string;
 }
 
 export class StorageProvider {
@@ -227,81 +229,70 @@ export class StorageProvider {
 			const parser = new VsixParser(filePath);
 			const { packageJson, manifest, fileSize, lastModified } = await parser.parse();
 
-			if (!packageJson) {
-				console.warn(`Could not parse package.json for ${filePath}`);
+			// Try to extract data from manifest first, fall back to package.json
+			const extensionData = this.extractExtensionDataWithManifestPriority(manifest, packageJson);
+
+			if (!extensionData.id || !extensionData.version || !extensionData.publisher) {
+				console.warn(`Missing required extension data for ${filePath}`);
 				return null;
 			}
 
-			// Create extension ID
-			const extensionId = `${packageJson.publisher}.${packageJson.name}`;
-
 			// Check if installed
-			const isInstalled = this.isExtensionInstalled(extensionId);
+			const isInstalled = this.isExtensionInstalled(extensionData.id);
 
 			// Check for updates (compare versions if installed)
 			let hasUpdate = false;
 			if (isInstalled) {
-				const installedExtension = vscode.extensions.getExtension(extensionId);
+				const installedExtension = vscode.extensions.getExtension(extensionData.id);
 				if (installedExtension) {
 					const installedVersion = installedExtension.packageJSON.version;
-					hasUpdate = this.compareVersions(packageJson.version, installedVersion) > 0;
+					hasUpdate = this.compareVersions(extensionData.version, installedVersion) > 0;
 				}
 			}
 
 			// Extract icon if available
 			let iconPath: string | undefined;
-			if (packageJson.icon) {
+			const iconSource = packageJson?.icon || this.extractIconFromManifest(manifest);
+			if (iconSource) {
 				try {
-					const iconBuffer = await parser.extractIcon(packageJson.icon);
+					const iconBuffer = await parser.extractIcon(iconSource);
 					if (iconBuffer) {
 						// Convert to data URI
-						const mimeType = VsixParser.getMimeTypeFromExtension(path.extname(packageJson.icon));
+						const mimeType = VsixParser.getMimeTypeFromExtension(path.extname(iconSource));
 						iconPath = `data:${mimeType};base64,${iconBuffer.toString('base64')}`;
 					}
 				} catch (error) {
-					console.warn(`Could not extract icon for ${extensionId}:`, error);
+					console.warn(`Could not extract icon for ${extensionData.id}:`, error);
 				}
 			}
 
-			// Extract author information
-			let authorName = 'Unknown';
-			if (typeof packageJson.author === 'string') {
-				authorName = packageJson.author;
-			} else if (packageJson.author && typeof packageJson.author === 'object') {
-				authorName = packageJson.author.name || 'Unknown';
-			}
-
-			// Extract repository URL
-			let repositoryUrl: string | undefined;
-			if (typeof packageJson.repository === 'string') {
-				repositoryUrl = packageJson.repository;
-			} else if (packageJson.repository && typeof packageJson.repository === 'object') {
-				repositoryUrl = packageJson.repository.url;
-			}
-
 			const extensionInfo: ExtensionInfo = {
-				id: extensionId,
-				title: packageJson.displayName || packageJson.name,
-				description: packageJson.description || '',
-				version: packageJson.version,
-				author: authorName,
-				publisher: packageJson.publisher,
+				id: extensionData.id,
+				title: extensionData.title,
+				description: extensionData.description,
+				version: extensionData.version,
+				author: extensionData.author,
+				publisher: extensionData.publisher,
 				icon: iconPath,
 				filePath,
 				fileSize,
 				lastModified,
 				isInstalled,
 				hasUpdate,
-				categories: packageJson.categories,
-				keywords: packageJson.keywords,
-				repository: repositoryUrl,
-				homepage: packageJson.homepage,
-				license: packageJson.license,
-				engines: packageJson.engines,
-				activationEvents: packageJson.activationEvents,
-				main: packageJson.main,
-				preview: packageJson.preview,
-				galleryBanner: packageJson.galleryBanner
+				categories: extensionData.categories,
+				keywords: extensionData.keywords,
+				repository: extensionData.repository,
+				homepage: extensionData.homepage,
+				license: extensionData.license,
+				engines: extensionData.engines,
+				activationEvents: extensionData.activationEvents,
+				main: extensionData.main,
+				preview: extensionData.preview,
+				galleryBanner: extensionData.galleryBanner,
+				tags: extensionData.tags,
+				galleryFlags: extensionData.galleryFlags,
+				targetPlatforms: extensionData.targetPlatforms,
+				language: extensionData.language
 			};
 
 			console.log(`Successfully parsed: ${extensionInfo.title} v${extensionInfo.version} by ${extensionInfo.author}`);
@@ -311,6 +302,192 @@ export class StorageProvider {
 			console.error(`Error parsing VSIX file ${filePath}:`, error);
 			return null;
 		}
+	}
+
+	/**
+	 * Extract extension data prioritizing manifest over package.json
+	 */
+	private extractExtensionDataWithManifestPriority(
+		manifest: VsixManifest | null,
+		packageJson: VsixPackageJson | null
+	): {
+		id: string;
+		title: string;
+		description: string;
+		version: string;
+		author: string;
+		publisher: string;
+		categories?: string[];
+		keywords?: string[];
+		repository?: string;
+		homepage?: string;
+		license?: string;
+		engines?: { [key: string]: string };
+		activationEvents?: string[];
+		main?: string;
+		preview?: boolean;
+		galleryBanner?: any;
+		tags?: string[];
+		galleryFlags?: string[];
+		targetPlatforms?: string[];
+		language?: string;
+	} {
+		// Extract from manifest first
+		let manifestData: any = {};
+		if (manifest?.PackageManifest?.Metadata?.[0]) {
+			const metadata = manifest.PackageManifest.Metadata[0];
+			const identity = metadata.Identity?.[0]?.$;
+			
+			if (identity) {
+				manifestData.id = `${identity.Publisher}.${identity.Id}`;
+				manifestData.version = identity.Version;
+				manifestData.publisher = identity.Publisher;
+				manifestData.language = identity.Language;
+			}
+
+			manifestData.title = metadata.DisplayName?.[0] || identity?.Id;
+			manifestData.description = metadata.Description?.[0]?._ || metadata.Description?.[0] || '';
+			
+			// Parse categories from manifest
+			if (metadata.Categories?.[0]) {
+				manifestData.categories = metadata.Categories[0].split(',').map((cat: string) => cat.trim());
+			}
+
+			// Parse tags from manifest
+			if (metadata.Tags?.[0]) {
+				manifestData.tags = metadata.Tags[0].split(',').map((tag: string) => tag.trim());
+			}
+
+			// Parse gallery flags
+			if (metadata.GalleryFlags?.[0]) {
+				manifestData.galleryFlags = metadata.GalleryFlags[0].split(',').map((flag: string) => flag.trim());
+			}
+
+			// Extract properties
+			if (metadata.Properties?.[0]?.Property) {
+				const properties = metadata.Properties[0].Property;
+				const propertyMap: { [key: string]: string } = {};
+				
+				properties.forEach((prop: any) => {
+					if (prop.$ && prop.$.Id && prop.$.Value) {
+						propertyMap[prop.$.Id] = prop.$.Value;
+					}
+				});
+
+				// Map known properties
+				if (propertyMap['Microsoft.VisualStudio.Code.Engine']) {
+					manifestData.engines = { vscode: propertyMap['Microsoft.VisualStudio.Code.Engine'] };
+				}
+				if (propertyMap['Microsoft.VisualStudio.Services.Links.Source']) {
+					manifestData.repository = propertyMap['Microsoft.VisualStudio.Services.Links.Source'];
+				}
+				if (propertyMap['Microsoft.VisualStudio.Services.Links.Getstarted']) {
+					manifestData.homepage = propertyMap['Microsoft.VisualStudio.Services.Links.Getstarted'];
+				}
+				if (propertyMap['Microsoft.VisualStudio.Services.Links.License']) {
+					manifestData.license = propertyMap['Microsoft.VisualStudio.Services.Links.License'];
+				}
+			}
+		}
+
+		// Extract target platforms from installation info
+		if (manifest?.PackageManifest?.Installation?.[0]?.InstallationTarget) {
+			const targets = manifest.PackageManifest.Installation[0].InstallationTarget;
+			manifestData.targetPlatforms = targets.map((target: any) => target.$.Id);
+		}
+
+		// Package.json fallbacks and additional data
+		let packageData: any = {};
+		if (packageJson) {
+			packageData = {
+				id: packageJson.publisher && packageJson.name ? `${packageJson.publisher}.${packageJson.name}` : '',
+				title: packageJson.displayName || packageJson.name,
+				description: packageJson.description || '',
+				version: packageJson.version,
+				publisher: packageJson.publisher,
+				categories: packageJson.categories,
+				keywords: packageJson.keywords,
+				engines: packageJson.engines,
+				activationEvents: packageJson.activationEvents,
+				main: packageJson.main,
+				preview: packageJson.preview,
+				galleryBanner: packageJson.galleryBanner,
+				license: packageJson.license,
+				homepage: packageJson.homepage
+			};
+
+			// Extract author information
+			if (typeof packageJson.author === 'string') {
+				packageData.author = packageJson.author;
+			} else if (packageJson.author && typeof packageJson.author === 'object') {
+				packageData.author = packageJson.author.name || 'Unknown';
+			}
+
+			// Extract repository URL
+			if (typeof packageJson.repository === 'string') {
+				packageData.repository = packageJson.repository;
+			} else if (packageJson.repository && typeof packageJson.repository === 'object') {
+				packageData.repository = packageJson.repository.url;
+			}
+		}
+
+		// Merge data with manifest taking priority
+		const result = {
+			// Core identity - manifest has priority
+			id: manifestData.id || packageData.id || '',
+			version: manifestData.version || packageData.version || '',
+			publisher: manifestData.publisher || packageData.publisher || '',
+			
+			// Display info - manifest has priority for title/description
+			title: manifestData.title || packageData.title || '',
+			description: manifestData.description || packageData.description || '',
+			
+			// Author - package.json usually has better author info
+			author: packageData.author || manifestData.publisher || 'Unknown',
+			
+			// Categories/Tags - manifest has priority
+			categories: manifestData.categories || packageData.categories,
+			tags: manifestData.tags,
+			
+			// Technical info - package.json has priority for these
+			engines: packageData.engines || manifestData.engines,
+			activationEvents: packageData.activationEvents,
+			main: packageData.main,
+			preview: packageData.preview,
+			galleryBanner: packageData.galleryBanner,
+			
+			// Links - manifest has priority
+			repository: manifestData.repository || packageData.repository,
+			homepage: manifestData.homepage || packageData.homepage,
+			license: manifestData.license || packageData.license,
+			
+			// Keywords - package.json has priority
+			keywords: packageData.keywords,
+			
+			// Manifest-specific fields
+			galleryFlags: manifestData.galleryFlags,
+			targetPlatforms: manifestData.targetPlatforms,
+			language: manifestData.language
+		};
+
+		return result;
+	}
+
+	/**
+	 * Extract icon path from manifest
+	 */
+	private extractIconFromManifest(manifest: VsixManifest | null): string | undefined {
+		if (!manifest?.PackageManifest?.Assets?.[0]?.Asset) {
+			return undefined;
+		}
+
+		const assets = manifest.PackageManifest.Assets[0].Asset;
+		const iconAsset = assets.find((asset: any) => 
+			asset.$.Type === 'Microsoft.VisualStudio.Services.Icons.Default' ||
+			asset.$.Type === 'Microsoft.VisualStudio.Services.Icons.Small'
+		);
+
+		return iconAsset?.$.Path;
 	}
 
 	private deduplicateExtensions(extensions: ExtensionInfo[]): ExtensionInfo[] {
@@ -423,13 +600,11 @@ export class StorageProvider {
 			const parser = new VsixParser(filePath);
 			const result = await parser.parse();
 
-			if (!result.packageJson) {
-				return { isValid: false, error: 'Invalid or missing package.json' };
-			}
+			// Try manifest first, then package.json
+			const extractedData = this.extractExtensionDataWithManifestPriority(result.manifest, result.packageJson);
 
-			// Basic validation
-			if (!result.packageJson.name || !result.packageJson.version || !result.packageJson.publisher) {
-				return { isValid: false, error: 'Missing required fields in package.json' };
+			if (!extractedData.id || !extractedData.version || !extractedData.publisher) {
+				return { isValid: false, error: 'Missing required fields in extension metadata' };
 			}
 
 			return { isValid: true };
@@ -490,7 +665,8 @@ export class StorageProvider {
 				ext.description.toLowerCase().includes(queryLower) ||
 				ext.author.toLowerCase().includes(queryLower) ||
 				ext.publisher.toLowerCase().includes(queryLower) ||
-				(ext.keywords && ext.keywords.some(keyword => keyword.toLowerCase().includes(queryLower)));
+				(ext.keywords && ext.keywords.some(keyword => keyword.toLowerCase().includes(queryLower))) ||
+				(ext.tags && ext.tags.some(tag => tag.toLowerCase().includes(queryLower)));
 
 			if (!matchesQuery) return false;
 
@@ -526,6 +702,7 @@ export class StorageProvider {
 		needsUpdate: number;
 		byCategory: { [category: string]: number };
 		byAuthor: { [author: string]: number };
+		byTag: { [tag: string]: number };
 		totalSize: number;
 	} {
 		const extensions = Array.from(this._extensionCache.values());
@@ -536,6 +713,7 @@ export class StorageProvider {
 			needsUpdate: extensions.filter(ext => ext.hasUpdate).length,
 			byCategory: {} as { [category: string]: number },
 			byAuthor: {} as { [author: string]: number },
+			byTag: {} as { [tag: string]: number },
 			totalSize: extensions.reduce((sum, ext) => sum + ext.fileSize, 0)
 		};
 
@@ -551,6 +729,15 @@ export class StorageProvider {
 		// Count by author
 		extensions.forEach(ext => {
 			stats.byAuthor[ext.author] = (stats.byAuthor[ext.author] || 0) + 1;
+		});
+
+		// Count by tag
+		extensions.forEach(ext => {
+			if (ext.tags) {
+				ext.tags.forEach(tag => {
+					stats.byTag[tag] = (stats.byTag[tag] || 0) + 1;
+				});
+			}
 		});
 
 		return stats;
