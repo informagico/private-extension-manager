@@ -108,30 +108,6 @@
 				});
 			}
 
-			// Open in editor button
-			const openBtn = item.querySelector(".open-btn");
-			if (openBtn) {
-				openBtn.addEventListener("click", (e) => {
-					e.stopPropagation();
-					vscode.postMessage({
-						command: "openInEditor",
-						itemId: itemId,
-					});
-				});
-			}
-
-			// Show in folder button
-			const showFolderBtn = item.querySelector(".show-folder-btn");
-			if (showFolderBtn) {
-				showFolderBtn.addEventListener("click", (e) => {
-					e.stopPropagation();
-					vscode.postMessage({
-						command: "showInFolder",
-						itemId: itemId,
-					});
-				});
-			}
-
 			// Install button
 			const installBtn = item.querySelector(".install-btn");
 			if (installBtn) {
@@ -430,16 +406,6 @@
 
 			const menuItems = [
 				{ label: "Show Details", command: "itemClicked", icon: "info" },
-				{
-					label: "Show in Folder",
-					command: "showInFolder",
-					icon: "folder-opened",
-				},
-				{
-					label: "Open in Editor",
-					command: "openInEditor",
-					icon: "go-to-file",
-				},
 			];
 
 			menuItems.forEach((menuItem) => {

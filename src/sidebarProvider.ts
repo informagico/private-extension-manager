@@ -75,17 +75,11 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 					case 'toggleStatus':
 						this._toggleItemStatus(message.itemId);
 						break;
-					case 'openInEditor':
-						this._openInEditor(message.itemId);
-						break;
 					case 'installItem':
 						this._installExtension(message.itemId);
 						break;
 					case 'updateItem':
 						this._updateExtension(message.itemId);
-						break;
-					case 'showInFolder':
-						this._showInFolder(message.itemId);
 						break;
 				}
 			},
@@ -271,48 +265,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		}
 	}
 
-	private _openInEditor(itemId: string): void {
-		const item = this._items.find(i => i.id === itemId);
-		if (item) {
-			const content = [
-				`# ${item.title}`,
-				``,
-				`**Version:** ${item.version}`,
-				`**Publisher:** ${item.publisher}`,
-				`**Author:** ${item.author}`,
-				`**Status:** ${item.isInstalled ? 'Installed' : 'Not Installed'}`,
-				item.hasUpdate ? `**Update Available:** Yes` : '',
-				``,
-				`## Description`,
-				item.description,
-				``,
-				`## File Information`,
-				`- **Path:** ${item.filePath}`,
-				item.fileSize ? `- **Size:** ${this.formatFileSize(item.fileSize)}` : '',
-				item.lastModified ? `- **Modified:** ${item.lastModified.toLocaleString()}` : '',
-				``,
-				item.categories && item.categories.length > 0 ? `## Categories` : '',
-				item.categories && item.categories.length > 0 ? item.categories.map(cat => `- ${cat}`).join('\n') : '',
-				``,
-				item.keywords && item.keywords.length > 0 ? `## Keywords` : '',
-				item.keywords && item.keywords.length > 0 ? item.keywords.join(', ') : ''
-			].filter(line => line !== '').join('\n');
 
-			vscode.workspace.openTextDocument({
-				content,
-				language: 'markdown'
-			}).then(doc => {
-				vscode.window.showTextDocument(doc);
-			});
-		}
-	}
-
-	private _showInFolder(itemId: string): void {
-		const item = this._items.find(i => i.id === itemId);
-		if (item && item.filePath) {
-			vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(item.filePath));
-		}
-	}
 
 	private formatFileSize(bytes: number): string {
 		const sizes = ['Bytes', 'KB', 'MB', 'GB'];
@@ -462,21 +415,12 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
                                                 <button class="action-btn toggle-status-btn" title="Toggle Status">
                                                     <span class="codicon codicon-circle-filled"></span>
                                                 </button>
-                                                <button class="action-btn open-btn" title="Open in Editor">
-                                                    <span class="codicon codicon-go-to-file"></span>
-                                                </button>
-                                                <button class="action-btn show-folder-btn" title="Show in Folder">
-                                                    <span class="codicon codicon-folder-opened"></span>
-                                                </button>
                                                 <button class="action-btn delete-btn" title="Uninstall">
                                                     <span class="codicon codicon-trash"></span>
                                                 </button>
                                             </div>
                                         ` : `
-                                            <div class="item-actions">
-                                                <button class="action-btn show-folder-btn" title="Show in Folder">
-                                                    <span class="codicon codicon-folder-opened"></span>
-                                                </button>
+                                            <div class="item-actions" style="display: none;">
                                             </div>
                                         `}
                                     </div>
