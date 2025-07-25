@@ -73,16 +73,6 @@
     "configuration": {
       "title": "Private Extensions",
       "properties": {
-        "privateExtensionsSidebar.showIcons": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show icons in the sidebar items"
-        },
-        "privateExtensionsSidebar.itemsPerPage": {
-          "type": "number",
-          "default": 10,
-          "description": "Number of items to show per page"
-        },
         "privateExtensionsSidebar.vsixDirectories": {
           "type": "array",
           "items": {
