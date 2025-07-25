@@ -71,13 +71,14 @@ body {
 .item {
     display: flex;
     align-items: center;
-    padding: 8px 16px;
+    padding: 4px 16px;
     cursor: pointer;
     transition: background-color 0.1s ease;
     border-bottom: none;
     position: relative;
     gap: 12px;
-    min-height: 72px;
+    height: 72px;
+    box-sizing: border-box;
 }
 
 .item:hover {
@@ -287,17 +288,16 @@ body {
     color: var(--vscode-button-foreground);
     border: none;
     border-radius: 2px;
-    padding: 4px 8px;
+    padding: 4px 4px;
     font-size: 11px;
     cursor: pointer;
     transition: background-color 0.2s ease;
     font-family: var(--vscode-font-family);
-    height: 24px;
+    height: 16px;
     box-sizing: border-box;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
 }
 
 .install-btn:hover, .update-btn:hover {
