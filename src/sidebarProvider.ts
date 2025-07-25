@@ -25,18 +25,29 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 	private _items: SidebarItem[] = [];
 	private _storageProvider: StorageProvider;
 	private _refreshInterval?: NodeJS.Timeout;
+	private _loadingPromise?: Promise<void>; // Track loading state
+	private _isScanning = false; // Prevent concurrent scans
 
 	constructor(private readonly _extensionUri: vscode.Uri, private readonly _context: vscode.ExtensionContext) {
 		this._storageProvider = new StorageProvider(_context);
 
-		// Listen for storage changes
+		// Listen for storage changes and automatically refresh webview
 		this._storageProvider.onDidChange(extensions => {
+			console.log(`Storage changed: ${extensions.length} extensions`);
 			this._items = this.convertExtensionsToSidebarItems(extensions);
-			this.refresh();
+			
+			// Automatically refresh the webview if it's visible
+			if (this._view) {
+				console.log('Refreshing webview with new data');
+				this._view.webview.html = this._getHtmlForWebview(this._view.webview);
+				
+				// Notify the webview that data has been refreshed
+				this._view.webview.postMessage({
+					command: 'scanComplete',
+					count: this._items.length
+				});
+			}
 		});
-
-		// Initialize with existing extensions
-		this.loadExtensions();
 
 		// Setup auto-refresh if enabled
 		this.setupAutoRefresh();
@@ -61,7 +72,18 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 			localResourceRoots: [this._extensionUri]
 		};
 
+		// Initially set the HTML
 		webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+
+		// If we already have data loaded, notify the webview
+		if (this._items.length > 0) {
+			setTimeout(() => {
+				webviewView.webview.postMessage({
+					command: 'scanComplete',
+					count: this._items.length
+				});
+			}, 100);
+		}
 
 		webviewView.webview.onDidReceiveMessage(
 			message => {
@@ -81,6 +103,12 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 					case 'updateItem':
 						this._updateExtension(message.itemId);
 						break;
+					case 'refresh':
+						this.scanDirectories();
+						break;
+					case 'addItem':
+						this.addDirectory();
+						break;
 				}
 			},
 			undefined,
@@ -88,11 +116,87 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		);
 	}
 
-	public async refresh(): Promise<void> {
-		await this.loadExtensions();
-		if (this._view) {
-			this._view.webview.html = this._getHtmlForWebview(this._view.webview);
+	/**
+	 * Scan directories in background and trigger storage refresh
+	 * This method can be called at startup and prevents multiple concurrent scans
+	 */
+	public async scanDirectoriesInBackground(): Promise<void> {
+		console.log('SidebarProvider: scanDirectoriesInBackground called');
+		
+		// Prevent multiple concurrent scans
+		if (this._isScanning) {
+			console.log('SidebarProvider: Scan already in progress, skipping...');
+			return;
 		}
+
+		// If there's already a loading operation, wait for it
+		if (this._loadingPromise) {
+			console.log('SidebarProvider: Waiting for existing loading operation...');
+			return this._loadingPromise;
+		}
+
+		this._isScanning = true;
+		this._loadingPromise = this._performBackgroundScan();
+
+		try {
+			await this._loadingPromise;
+			console.log('SidebarProvider: scanDirectoriesInBackground completed successfully');
+		} catch (error) {
+			console.error('SidebarProvider: scanDirectoriesInBackground failed:', error);
+			throw error;
+		} finally {
+			this._isScanning = false;
+			this._loadingPromise = undefined;
+		}
+	}
+
+	/**
+	 * Internal method to perform the actual background scan
+	 */
+	private async _performBackgroundScan(): Promise<void> {
+		try {
+			console.log('SidebarProvider: Starting background directory scan...');
+			
+			// Add timeout to the storage provider refresh
+			const refreshPromise = this._storageProvider.refresh();
+			const timeoutPromise = new Promise<ExtensionInfo[]>((_, reject) => {
+				setTimeout(() => reject(new Error('Storage provider refresh timeout after 25 seconds')), 25000);
+			});
+			
+			const extensions = await Promise.race([refreshPromise, timeoutPromise]);
+			console.log(`SidebarProvider: Background scan complete: found ${extensions.length} extensions`);
+			
+			// The storage provider will emit onDidChange event, which will update the UI
+			return;
+		} catch (error) {
+			console.error('SidebarProvider: Error during background directory scan:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get current extension count (useful for startup feedback)
+	 */
+	public getExtensionCount(): number {
+		return this._items.length;
+	}
+
+	/**
+	 * Check if extensions are currently being loaded
+	 */
+	public isLoading(): boolean {
+		return this._loadingPromise !== undefined;
+	}
+
+	public async refresh(): Promise<void> {
+		// Prevent multiple concurrent refreshes
+		if (this._isScanning) {
+			console.log('SidebarProvider: Scan in progress, skipping manual refresh');
+			return;
+		}
+		
+		console.log('SidebarProvider: Manual refresh requested');
+		await this.scanDirectoriesInBackground();
 	}
 
 	public async addDirectory(): Promise<void> {
@@ -122,8 +226,14 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 	}
 
 	public async scanDirectories(): Promise<void> {
+		// Prevent multiple concurrent scans
+		if (this._isScanning) {
+			console.log('SidebarProvider: Scan already in progress, skipping user-triggered scan');
+			return;
+		}
+
 		try {
-			vscode.window.withProgress({
+			await vscode.window.withProgress({
 				location: vscode.ProgressLocation.Notification,
 				title: "Scanning VSIX directories...",
 				cancellable: false
@@ -138,6 +248,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 				);
 			});
 		} catch (error) {
+			console.error('SidebarProvider: Error scanning directories:', error);
 			vscode.window.showErrorMessage(`Error scanning directories: ${error}`);
 		}
 	}
@@ -153,6 +264,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		try {
 			const extensions = await this._storageProvider.getAllExtensions();
 			this._items = this.convertExtensionsToSidebarItems(extensions);
+			console.log(`Loaded ${this._items.length} extensions`);
 		} catch (error) {
 			console.error('Error loading extensions:', error);
 			vscode.window.showErrorMessage(`Error loading extensions: ${error}`);
@@ -226,7 +338,13 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		if (extension) {
 			const success = await this._storageProvider.installExtension(extension);
 			if (success) {
-				await this.refresh();
+				// Refresh will happen automatically via onDidChange event
+				// But we can also send immediate feedback to webview
+				if (this._view) {
+					this._view.webview.postMessage({
+						command: 'installComplete'
+					});
+				}
 			}
 		}
 	}
@@ -248,7 +366,13 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 			if (confirm === 'Uninstall') {
 				const success = await this._storageProvider.uninstallExtension(itemId);
 				if (success) {
-					await this.refresh();
+					// Refresh will happen automatically via onDidChange event
+					// But we can also send immediate feedback to webview
+					if (this._view) {
+						this._view.webview.postMessage({
+							command: 'refresh'
+						});
+					}
 				}
 			}
 		}
@@ -264,8 +388,6 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 			}
 		}
 	}
-
-
 
 	private formatFileSize(bytes: number): string {
 		const sizes = ['Bytes', 'KB', 'MB', 'GB'];

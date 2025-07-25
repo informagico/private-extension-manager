@@ -11,7 +11,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:privateExtensionsSidebar.sidebarView"
+    "*"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -102,6 +102,11 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically scan directories when .vsix files are added or removed"
+        },
+        "privateExtensionsSidebar.loadAtStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Load and scan extensions automatically when VS Code starts"
         },
         "privateExtensionsSidebar.scanInterval": {
           "type": "number",

@@ -43,40 +43,148 @@ export class StorageProvider {
 	private _watchers: fs.FSWatcher[] = [];
 	private _onDidChangeEmitter = new vscode.EventEmitter<ExtensionInfo[]>();
 	public readonly onDidChange = this._onDidChangeEmitter.event;
+	private _isInitialized = false;
+	private _initializationPromise?: Promise<void>;
+	private _isRefreshing = false; // Prevent concurrent refreshes
+	private _initializationAttempted = false; // Track if initialization was attempted
 
 	constructor(private context: vscode.ExtensionContext) {
+		console.log('StorageProvider: Constructor called');
+		
+		// Don't initialize immediately - wait for explicit calls
 		this.initializeWatchers();
 
 		// Watch for configuration changes
 		vscode.workspace.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration('privateExtensionsSidebar.vsixDirectories')) {
+				console.log('StorageProvider: Configuration changed, refreshing...');
 				this.refreshWatchers();
-				this.scanAllDirectories();
+				// Don't auto-scan on config change during startup
+				if (this._isInitialized) {
+					this.scanAllDirectories();
+				}
 			}
 		});
+	}
+
+	private async initialize(): Promise<void> {
+		console.log('StorageProvider: initialize() called, _isInitialized:', this._isInitialized, '_initializationAttempted:', this._initializationAttempted);
+		
+		if (this._isInitialized) {
+			console.log('StorageProvider: Already initialized, returning');
+			return;
+		}
+
+		if (this._initializationAttempted) {
+			console.log('StorageProvider: Initialization already attempted, skipping');
+			return;
+		}
+
+		this._initializationAttempted = true;
+		console.log('StorageProvider: Starting initialization...');
+		
+		try {
+			// Don't load extensions immediately - just mark as initialized
+			// Extensions will be loaded on the first explicit refresh call
+			this._isInitialized = true;
+			console.log('StorageProvider: Initialization complete (lazy loading)');
+		} catch (error) {
+			console.error('StorageProvider: Initialization failed:', error);
+			this._isInitialized = true; // Mark as initialized even on error to prevent retries
+		}
+	}
+
+	/**
+	 * Ensure the storage provider is initialized
+	 */
+	private async ensureInitialized(): Promise<void> {
+		console.log('StorageProvider: ensureInitialized() called, _isInitialized:', this._isInitialized);
+		
+		if (this._isInitialized) {
+			console.log('StorageProvider: Already initialized, returning immediately');
+			return;
+		}
+
+		if (this._initializationPromise) {
+			console.log('StorageProvider: Waiting for existing initialization...');
+			await this._initializationPromise;
+			return;
+		}
+
+		console.log('StorageProvider: Starting new initialization...');
+		this._initializationPromise = this.initialize();
+		
+		try {
+			await this._initializationPromise;
+		} finally {
+			this._initializationPromise = undefined;
+		}
 	}
 
 	/**
 	 * Get all extensions from configured directories
 	 */
 	public async getAllExtensions(): Promise<ExtensionInfo[]> {
+		console.log('StorageProvider: getAllExtensions() called');
+		
+		// Don't call ensureInitialized here to avoid recursive initialization
+		if (!this._isInitialized) {
+			console.log('StorageProvider: Not initialized, but proceeding with scan anyway');
+		}
+		
 		const directories = this.getConfiguredDirectories();
 		const extensions: ExtensionInfo[] = [];
 
+		console.log(`StorageProvider: Scanning ${directories.length} directories...`);
+
+		if (directories.length === 0) {
+			console.log('StorageProvider: No directories configured, returning empty array');
+			return extensions;
+		}
+
 		for (const directory of directories) {
 			try {
+				console.log(`StorageProvider: Scanning directory: ${directory}`);
 				const dirExtensions = await this.scanDirectory(directory);
 				extensions.push(...dirExtensions);
+				console.log(`StorageProvider: Found ${dirExtensions.length} extensions in ${directory}`);
 			} catch (error) {
-				console.error(`Error scanning directory ${directory}:`, error);
+				console.error(`StorageProvider: Error scanning directory ${directory}:`, error);
 				vscode.window.showWarningMessage(`Failed to scan directory: ${directory}`);
 			}
 		}
 
 		// Remove duplicates based on extension ID, keeping the most recent version
 		const uniqueExtensions = this.deduplicateExtensions(extensions);
+		console.log(`StorageProvider: After deduplication: ${uniqueExtensions.length} unique extensions`);
+		
+		// Update installation status for all extensions
+		this.updateInstallationStatus(uniqueExtensions);
+		console.log('StorageProvider: Installation status updated');
 
+		console.log(`StorageProvider: getAllExtensions() returning ${uniqueExtensions.length} extensions`);
 		return uniqueExtensions;
+	}
+
+	/**
+	 * Update installation status for all extensions
+	 */
+	private updateInstallationStatus(extensions: ExtensionInfo[]): void {
+		extensions.forEach(ext => {
+			const wasInstalled = ext.isInstalled;
+			ext.isInstalled = this.isExtensionInstalled(ext.id);
+			
+			// Check for updates if installed
+			if (ext.isInstalled) {
+				const installedExtension = vscode.extensions.getExtension(ext.id);
+				if (installedExtension) {
+					const installedVersion = installedExtension.packageJSON.version;
+					ext.hasUpdate = this.compareVersions(ext.version, installedVersion) > 0;
+				}
+			} else {
+				ext.hasUpdate = false;
+			}
+		});
 	}
 
 	/**
@@ -102,9 +210,15 @@ export class StorageProvider {
 			await vscode.commands.executeCommand('workbench.extensions.installExtension',
 				vscode.Uri.file(extensionInfo.filePath));
 
-			// Update cache
+			// Update cache immediately
 			extensionInfo.isInstalled = true;
+			extensionInfo.hasUpdate = false;
 			this._extensionCache.set(extensionInfo.id, extensionInfo);
+
+			// Trigger refresh to update UI
+			setTimeout(() => {
+				this.scanAllDirectories();
+			}, 1000);
 
 			vscode.window.showInformationMessage(`Successfully installed ${extensionInfo.title}`);
 			return true;
@@ -128,12 +242,18 @@ export class StorageProvider {
 
 			await vscode.commands.executeCommand('workbench.extensions.uninstallExtension', extensionId);
 
-			// Update cache
+			// Update cache immediately
 			const cachedExtension = this._extensionCache.get(extensionId);
 			if (cachedExtension) {
 				cachedExtension.isInstalled = false;
+				cachedExtension.hasUpdate = false;
 				this._extensionCache.set(extensionId, cachedExtension);
 			}
+
+			// Trigger refresh to update UI
+			setTimeout(() => {
+				this.scanAllDirectories();
+			}, 1000);
 
 			vscode.window.showInformationMessage(`Successfully uninstalled extension`);
 			return true;
@@ -148,22 +268,57 @@ export class StorageProvider {
 	 * Refresh all extensions from directories
 	 */
 	public async refresh(): Promise<ExtensionInfo[]> {
-		this._extensionCache.clear();
-		const extensions = await this.getAllExtensions();
+		console.log('StorageProvider: refresh() called');
+		
+		// Prevent multiple concurrent refreshes
+		if (this._isRefreshing) {
+			console.log('StorageProvider: Refresh already in progress, skipping...');
+			return Array.from(this._extensionCache.values());
+		}
 
-		// Update cache
-		extensions.forEach(ext => {
-			this._extensionCache.set(ext.id, ext);
-		});
+		this._isRefreshing = true;
+		
+		try {
+			console.log('StorageProvider: Starting refresh process...');
+			
+			// Ensure initialization only once, but don't make it block the refresh
+			await this.ensureInitialized();
+			console.log('StorageProvider: Initialization ensured');
+			
+			this._extensionCache.clear();
+			console.log('StorageProvider: Cache cleared, calling getAllExtensions...');
+			
+			const extensions = await this.getAllExtensions();
+			console.log(`StorageProvider: getAllExtensions returned ${extensions.length} extensions`);
 
-		this._onDidChangeEmitter.fire(extensions);
-		return extensions;
+			// Update cache
+			extensions.forEach(ext => {
+				this._extensionCache.set(ext.id, ext);
+			});
+			console.log('StorageProvider: Cache updated');
+
+			console.log(`StorageProvider: Refresh complete, firing onDidChange with ${extensions.length} extensions`);
+			
+			// Use setTimeout to ensure the event is fired asynchronously
+			setTimeout(() => {
+				this._onDidChangeEmitter.fire(extensions);
+			}, 0);
+			
+			return extensions;
+		} catch (error) {
+			console.error('StorageProvider: Error during refresh:', error);
+			throw error;
+		} finally {
+			this._isRefreshing = false;
+			console.log('StorageProvider: refresh() finally block - _isRefreshing set to false');
+		}
 	}
 
 	/**
 	 * Dispose resources
 	 */
 	public dispose(): void {
+		console.log('StorageProvider: Disposing...');
 		this._watchers.forEach(watcher => watcher.close());
 		this._watchers = [];
 		this._onDidChangeEmitter.dispose();
@@ -187,7 +342,7 @@ export class StorageProvider {
 				fs.accessSync(dir, fs.constants.R_OK);
 				return true;
 			} catch {
-				console.warn(`Directory not accessible: ${dir}`);
+				console.warn(`StorageProvider: Directory not accessible: ${dir}`);
 				return false;
 			}
 		});
@@ -200,8 +355,6 @@ export class StorageProvider {
 			const files = await readdir(directory);
 			const vsixFiles = files.filter(file => path.extname(file).toLowerCase() === '.vsix');
 
-			console.log(`Found ${vsixFiles.length} VSIX files in ${directory}`);
-
 			for (const file of vsixFiles) {
 				const filePath = path.join(directory, file);
 				try {
@@ -210,12 +363,12 @@ export class StorageProvider {
 						extensions.push(extensionInfo);
 					}
 				} catch (error) {
-					console.error(`Error parsing ${filePath}:`, error);
+					console.error(`StorageProvider: Error parsing ${filePath}:`, error);
 					// Continue with other files even if one fails
 				}
 			}
 		} catch (error) {
-			console.error(`Error reading directory ${directory}:`, error);
+			console.error(`StorageProvider: Error reading directory ${directory}:`, error);
 			throw error;
 		}
 
@@ -224,8 +377,6 @@ export class StorageProvider {
 
 	private async parseVsixFile(filePath: string): Promise<ExtensionInfo | null> {
 		try {
-			console.log(`Parsing VSIX file: ${filePath}`);
-
 			const parser = new VsixParser(filePath);
 			const { packageJson, manifest, fileSize, lastModified } = await parser.parse();
 
@@ -233,7 +384,7 @@ export class StorageProvider {
 			const extensionData = this.extractExtensionDataWithManifestPriority(manifest, packageJson);
 
 			if (!extensionData.id || !extensionData.version || !extensionData.publisher) {
-				console.warn(`Missing required extension data for ${filePath}`);
+				console.warn(`StorageProvider: Missing required extension data for ${filePath}`);
 				return null;
 			}
 
@@ -262,7 +413,7 @@ export class StorageProvider {
 						iconPath = `data:${mimeType};base64,${iconBuffer.toString('base64')}`;
 					}
 				} catch (error) {
-					console.warn(`Could not extract icon for ${extensionData.id}:`, error);
+					console.warn(`StorageProvider: Could not extract icon for ${extensionData.id}:`, error);
 				}
 			}
 
@@ -295,11 +446,10 @@ export class StorageProvider {
 				language: extensionData.language
 			};
 
-			console.log(`Successfully parsed: ${extensionInfo.title} v${extensionInfo.version} by ${extensionInfo.author}`);
 			return extensionInfo;
 
 		} catch (error) {
-			console.error(`Error parsing VSIX file ${filePath}:`, error);
+			console.error(`StorageProvider: Error parsing VSIX file ${filePath}:`, error);
 			return null;
 		}
 	}
@@ -544,20 +694,20 @@ export class StorageProvider {
 			try {
 				const watcher = fs.watch(directory, { persistent: false }, (eventType, filename) => {
 					if (filename && path.extname(filename).toLowerCase() === '.vsix') {
-						console.log(`VSIX file ${eventType}: ${filename} in ${directory}`);
+						console.log(`StorageProvider: VSIX file ${eventType}: ${filename} in ${directory}`);
 						// Debounce the refresh to avoid multiple rapid calls
 						this.debounceRefresh();
 					}
 				});
 
 				watcher.on('error', (error) => {
-					console.error(`File watcher error for ${directory}:`, error);
+					console.error(`StorageProvider: File watcher error for ${directory}:`, error);
 				});
 
 				this._watchers.push(watcher);
-				console.log(`Watching directory: ${directory}`);
+				console.log(`StorageProvider: Watching directory: ${directory}`);
 			} catch (error) {
-				console.error(`Failed to watch directory ${directory}:`, error);
+				console.error(`StorageProvider: Failed to watch directory ${directory}:`, error);
 			}
 		});
 	}
@@ -569,14 +719,20 @@ export class StorageProvider {
 		}
 
 		this.refreshTimeout = setTimeout(() => {
-			console.log('Debounced refresh triggered');
+			console.log('StorageProvider: Debounced refresh triggered by file watcher');
 			this.scanAllDirectories();
-		}, 1000); // 1 second debounce
+		}, 2000); // Increased debounce time to 2 seconds to reduce frequency
 	}
 
 	private async scanAllDirectories(): Promise<void> {
+		// Prevent multiple concurrent scans from file watchers
+		if (this._isRefreshing) {
+			console.log('StorageProvider: Refresh in progress, skipping file watcher scan');
+			return;
+		}
+
 		try {
-			console.log('Scanning all directories for changes...');
+			console.log('StorageProvider: Scanning all directories for changes...');
 			const extensions = await this.getAllExtensions();
 
 			// Update cache
@@ -585,10 +741,10 @@ export class StorageProvider {
 				this._extensionCache.set(ext.id, ext);
 			});
 
-			console.log(`Found ${extensions.length} extensions total`);
+			console.log(`StorageProvider: Scan complete, found ${extensions.length} extensions total, firing onDidChange`);
 			this._onDidChangeEmitter.fire(extensions);
 		} catch (error) {
-			console.error('Error during directory scan:', error);
+			console.error('StorageProvider: Error during directory scan:', error);
 		}
 	}
 
@@ -638,7 +794,7 @@ export class StorageProvider {
 				validationResult: validation
 			};
 		} catch (error) {
-			console.error(`Error getting extension details for ${extensionId}:`, error);
+			console.error(`StorageProvider: Error getting extension details for ${extensionId}:`, error);
 			return extension;
 		}
 	}

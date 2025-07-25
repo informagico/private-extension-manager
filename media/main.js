@@ -249,58 +249,67 @@
 	// Handle messages from the extension
 	window.addEventListener("message", (event) => {
 		const message = event.data;
+		console.log("Webview received message:", message.command);
+
 		switch (message.command) {
 			case "refresh":
-				// Re-setup event listeners after refresh and restore search
+				// Manual refresh triggered
 				showLoadingState(false);
 				setTimeout(() => {
+					console.log("Setting up event listeners after refresh");
 					setupItemEventListeners();
 					restoreSearchState();
 					showToast("Extensions refreshed", "success");
 				}, 50);
 				break;
+
 			case "scanComplete":
+				// Automatic scan completed (from storage provider changes)
+				console.log(`Scan complete: ${message.count} extensions`);
 				showLoadingState(false);
 				setTimeout(() => {
+					console.log("Setting up event listeners after scan complete");
 					setupItemEventListeners();
 					restoreSearchState();
 					if (message.count !== undefined) {
-						showToast(
-							`Found ${message.count} extension${
-								message.count === 1 ? "" : "s"
-							}`,
-							"success"
-						);
+						// Only show toast for manual refreshes, not automatic ones
+						const isManualRefresh = document.querySelector(".loading") !== null;
+						if (isManualRefresh) {
+							showToast(
+								`Found ${message.count} extension${
+									message.count === 1 ? "" : "s"
+								}`,
+								"success"
+							);
+						}
 					}
 				}, 50);
 				break;
+
 			case "installComplete":
+				console.log("Install complete");
 				// Reset install button states
 				document.querySelectorAll(".install-btn[disabled]").forEach((btn) => {
 					btn.innerHTML =
 						'<span class="codicon codicon-cloud-download"></span> Install';
 					btn.disabled = false;
 				});
-				// Refresh the view
-				setTimeout(() => {
-					setupItemEventListeners();
-					restoreSearchState();
-				}, 100);
+				// UI will be refreshed automatically via storage provider changes
 				break;
+
 			case "updateComplete":
+				console.log("Update complete");
 				// Reset update button states
 				document.querySelectorAll(".update-btn[disabled]").forEach((btn) => {
 					btn.innerHTML =
 						'<span class="codicon codicon-arrow-up"></span> Update';
 					btn.disabled = false;
 				});
-				// Refresh the view
-				setTimeout(() => {
-					setupItemEventListeners();
-					restoreSearchState();
-				}, 100);
+				// UI will be refreshed automatically via storage provider changes
 				break;
+
 			case "error":
+				console.error("Extension error:", message.message);
 				showLoadingState(false);
 				// Reset button states on error
 				document
@@ -322,6 +331,7 @@
 
 	// Initialize on load
 	document.addEventListener("DOMContentLoaded", () => {
+		console.log("DOM loaded, restoring search state");
 		restoreSearchState();
 	});
 
@@ -329,6 +339,7 @@
 	if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", restoreSearchState);
 	} else {
+		console.log("DOM already loaded, restoring search state immediately");
 		restoreSearchState();
 	}
 
@@ -534,4 +545,14 @@
 		restoreSearchState,
 		currentSearchTerm: () => currentSearchTerm,
 	};
+
+	// Log when the script initializes
+	console.log("Main.js initialized, setting up initial event listeners");
+
+	// Set up initial event listeners and restore state
+	setTimeout(() => {
+		setupItemEventListeners();
+		restoreSearchState();
+		console.log("Initial setup complete");
+	}, 100);
 })();

@@ -11,6 +11,9 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerWebviewViewProvider(PrivateExtensionsSidebarProvider.viewType, sidebarProvider)
 	);
 
+	// **NEW: Load extensions immediately at startup**
+	loadExtensionsAtStartup(sidebarProvider, context);
+
 	// Register commands
 	context.subscriptions.push(
 		vscode.commands.registerCommand('privateExtensionsSidebar.refresh', async () => {
@@ -92,6 +95,86 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push({
 		dispose: () => sidebarProvider.dispose()
 	});
+}
+
+/**
+ * Load extensions at startup without waiting for sidebar activation
+ */
+async function loadExtensionsAtStartup(sidebarProvider: PrivateExtensionsSidebarProvider, context: vscode.ExtensionContext) {
+	try {
+		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+		const directories = config.get<string[]>('vsixDirectories', []);
+		
+		// Only scan if directories are configured
+		if (directories.length === 0) {
+			console.log('Extension: No VSIX directories configured, skipping startup scan');
+			return;
+		}
+
+		// Check if startup loading is enabled
+		const loadAtStartup = config.get<boolean>('loadAtStartup', true);
+		if (!loadAtStartup) {
+			console.log('Extension: Startup loading disabled, skipping startup scan');
+			return;
+		}
+
+		// Check if auto-scan is enabled
+		const autoScan = config.get<boolean>('autoScan', true);
+		if (!autoScan) {
+			console.log('Extension: Auto-scan disabled, skipping startup scan');
+			return;
+		}
+
+		console.log('Extension: Starting extension scan at startup...');
+		
+		// Add a small delay to ensure everything is properly initialized
+		await new Promise(resolve => setTimeout(resolve, 500));
+		
+		// Show progress notification for startup scan
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: "Loading private extensions...",
+			cancellable: false
+		}, async (progress) => {
+			progress.report({ increment: 0, message: "Scanning directories..." });
+			
+			try {
+				console.log('Extension: About to call scanDirectoriesInBackground...');
+				
+				// Add timeout protection
+				const scanPromise = sidebarProvider.scanDirectoriesInBackground();
+				const timeoutPromise = new Promise<void>((_, reject) => {
+					setTimeout(() => reject(new Error('Scan timeout after 30 seconds')), 30000);
+				});
+				
+				await Promise.race([scanPromise, timeoutPromise]);
+				
+				console.log('Extension: scanDirectoriesInBackground completed successfully');
+				progress.report({ increment: 100, message: "Complete" });
+				
+				// Give a moment for the scan to complete
+				await new Promise(resolve => setTimeout(resolve, 100));
+				
+				// Optional: Show completion message
+				const extensionCount = sidebarProvider.getExtensionCount();
+				console.log(`Extension: Final extension count: ${extensionCount}`);
+				if (extensionCount > 0) {
+					console.log(`Extension: Loaded ${extensionCount} private extensions at startup`);
+					// Uncomment next line if you want a notification:
+					// vscode.window.showInformationMessage(`Loaded ${extensionCount} private extension${extensionCount === 1 ? '' : 's'}`);
+				}
+			} catch (error) {
+				console.error('Extension: Error during startup extension scan:', error);
+				progress.report({ increment: 100, message: "Error occurred" });
+				vscode.window.showWarningMessage(`Failed to scan extensions at startup: ${error}`);
+			}
+		});
+		
+		console.log('Extension: Startup scan process completed');
+		
+	} catch (error) {
+		console.error('Extension: Error in loadExtensionsAtStartup:', error);
+	}
 }
 
 export function deactivate() { }
