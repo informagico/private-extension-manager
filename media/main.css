@@ -548,3 +548,104 @@ body {
 		transform: translateX(0);
 	}
 }
+
+/* Toast notifications */
+.toast {
+	position: fixed;
+	top: 10px;
+	right: 10px;
+	background: var(--vscode-notifications-background);
+	color: var(--vscode-notifications-foreground);
+	border: 1px solid var(--vscode-notifications-border);
+	border-radius: 4px;
+	padding: 8px 12px;
+	font-size: 12px;
+	z-index: 1000;
+	opacity: 0;
+	transition: opacity 0.3s ease;
+	max-width: 300px;
+	word-wrap: break-word;
+}
+
+.toast.visible {
+	opacity: 1;
+}
+
+.toast.error {
+	border-color: var(--vscode-errorForeground);
+	color: var(--vscode-errorForeground);
+	background-color: var(--vscode-inputValidation-errorBackground);
+}
+
+.toast.success {
+	border-color: var(--vscode-charts-green);
+	color: var(--vscode-charts-green);
+}
+
+/* Context menu */
+.context-menu {
+	position: fixed;
+	background: var(--vscode-menu-background);
+	border: 1px solid var(--vscode-menu-border);
+	border-radius: 4px;
+	padding: 4px 0;
+	z-index: 1000;
+	min-width: 150px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.context-menu-item {
+	padding: 6px 12px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--vscode-menu-foreground);
+	background-color: transparent;
+	transition: background-color 0.1s ease;
+}
+
+.context-menu-item:hover {
+	background-color: var(--vscode-menu-selectionBackground);
+}
+
+/* Drop overlay */
+.drop-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 123, 255, 0.1);
+	border: 2px dashed var(--vscode-focusBorder);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 999;
+	font-size: 16px;
+	color: var(--vscode-focusBorder);
+}
+
+.drop-overlay-content {
+	text-align: center;
+}
+
+.drop-overlay-icon {
+	font-size: 48px;
+	margin-bottom: 8px;
+}
+
+/* Spin animation for loading states */
+.spin {
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}

@@ -343,46 +343,20 @@
 		restoreSearchState();
 	}
 
-	// Add visual feedback for actions
+	// Add visual feedback for actions - UPDATED to use CSS classes
 	function showToast(message, type = "info") {
 		const toast = document.createElement("div");
-		toast.style.cssText = `
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: var(--vscode-notifications-background);
-            color: var(--vscode-notifications-foreground);
-            border: 1px solid var(--vscode-notifications-border);
-            border-radius: 4px;
-            padding: 8px 12px;
-            font-size: 12px;
-            z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            max-width: 300px;
-            word-wrap: break-word;
-        `;
-
-		if (type === "error") {
-			toast.style.borderColor = "var(--vscode-errorForeground)";
-			toast.style.color = "var(--vscode-errorForeground)";
-			toast.style.backgroundColor =
-				"var(--vscode-inputValidation-errorBackground)";
-		} else if (type === "success") {
-			toast.style.borderColor = "var(--vscode-charts-green)";
-			toast.style.color = "var(--vscode-charts-green)";
-		}
-
+		toast.className = `toast ${type}`;
 		toast.textContent = message;
 		document.body.appendChild(toast);
 
-		// Fade in
-		setTimeout(() => (toast.style.opacity = "1"), 10);
+		// Show toast
+		setTimeout(() => toast.classList.add("visible"), 10);
 
-		// Fade out and remove
+		// Hide and remove toast
 		setTimeout(
 			() => {
-				toast.style.opacity = "0";
+				toast.classList.remove("visible");
 				setTimeout(() => {
 					if (document.body.contains(toast)) {
 						document.body.removeChild(toast);
@@ -393,7 +367,7 @@
 		);
 	}
 
-	// Add context menu functionality
+	// Add context menu functionality - UPDATED to use CSS classes
 	document.addEventListener("contextmenu", (e) => {
 		const item = e.target.closest(".item");
 		if (item) {
@@ -402,18 +376,14 @@
 
 			// Create context menu
 			const contextMenu = document.createElement("div");
-			contextMenu.style.cssText = `
-                position: fixed;
-                top: ${e.clientY}px;
-                left: ${e.clientX}px;
-                background: var(--vscode-menu-background);
-                border: 1px solid var(--vscode-menu-border);
-                border-radius: 4px;
-                padding: 4px 0;
-                z-index: 1000;
-                min-width: 150px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            `;
+			contextMenu.className = "context-menu";
+
+			// Position the menu
+			const rect = contextMenu.getBoundingClientRect();
+			const x = Math.min(e.clientX, window.innerWidth - 150);
+			const y = Math.min(e.clientY, window.innerHeight - 100);
+			contextMenu.style.left = `${x}px`;
+			contextMenu.style.top = `${y}px`;
 
 			const menuItems = [
 				{ label: "Show Details", command: "itemClicked", icon: "info" },
@@ -421,15 +391,7 @@
 
 			menuItems.forEach((menuItem) => {
 				const menuOption = document.createElement("div");
-				menuOption.style.cssText = `
-                    padding: 6px 12px;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    font-size: 12px;
-                    color: var(--vscode-menu-foreground);
-                `;
+				menuOption.className = "context-menu-item";
 
 				menuOption.innerHTML = `
                     <span class="codicon codicon-${menuItem.icon}"></span>
@@ -444,15 +406,6 @@
 					document.body.removeChild(contextMenu);
 				});
 
-				menuOption.addEventListener("mouseenter", () => {
-					menuOption.style.backgroundColor =
-						"var(--vscode-menu-selectionBackground)";
-				});
-
-				menuOption.addEventListener("mouseleave", () => {
-					menuOption.style.backgroundColor = "transparent";
-				});
-
 				contextMenu.appendChild(menuOption);
 			});
 
@@ -461,7 +414,9 @@
 			// Remove context menu when clicking elsewhere
 			const removeContextMenu = (e) => {
 				if (!contextMenu.contains(e.target)) {
-					document.body.removeChild(contextMenu);
+					if (document.body.contains(contextMenu)) {
+						document.body.removeChild(contextMenu);
+					}
 					document.removeEventListener("click", removeContextMenu);
 				}
 			};
@@ -472,7 +427,7 @@
 		}
 	});
 
-	// Add drag and drop functionality for .vsix files
+	// Add drag and drop functionality for .vsix files - UPDATED to use CSS classes
 	document.addEventListener("dragover", (e) => {
 		e.preventDefault();
 		e.dataTransfer.dropEffect = "copy";
@@ -480,24 +435,9 @@
 		if (!document.querySelector(".drop-overlay")) {
 			const overlay = document.createElement("div");
 			overlay.className = "drop-overlay";
-			overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 123, 255, 0.1);
-                border: 2px dashed var(--vscode-focusBorder);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 999;
-                font-size: 16px;
-                color: var(--vscode-focusBorder);
-            `;
 			overlay.innerHTML = `
-                <div>
-                    <div class="codicon codicon-file" style="font-size: 48px; margin-bottom: 8px;"></div>
+                <div class="drop-overlay-content">
+                    <div class="codicon codicon-file drop-overlay-icon"></div>
                     <div>Drop .vsix files here to install</div>
                 </div>
             `;
