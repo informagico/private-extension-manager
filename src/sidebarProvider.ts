@@ -454,6 +454,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
                                     ` : ''}
                                 </div>
                                 <div class="item-content">
+                                    <!-- Row 1: Title -->
                                     <div class="item-header">
                                         <div class="item-title">${item.title}</div>
                                         ${item.isInstalled ? `
@@ -479,7 +480,11 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
                                             </div>
                                         `}
                                     </div>
+                                    
+                                    <!-- Row 2: Description -->
                                     <div class="item-description">${item.description}</div>
+                                    
+                                    <!-- Row 3: Author and buttons -->
                                     <div class="item-meta-wrapper">
                                         <div class="item-meta">
                                             <div class="item-author">
