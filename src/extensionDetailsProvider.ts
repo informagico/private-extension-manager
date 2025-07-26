@@ -36,6 +36,81 @@ export class ExtensionDetailsProvider {
 		private readonly _storageProvider: StorageProvider
 	) { }
 
+	/**
+	 * Triggers VS Code extension restart with user-configurable behavior
+	 */
+	private async triggerExtensionRestart(operation: 'install' | 'update' | 'uninstall', extensionName: string): Promise<void> {
+		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+		const autoRestart = config.get<boolean>('autoRestartAfterInstall', false);
+		const restartMethod = config.get<string>('restartMethod', 'prompt');
+
+		if (autoRestart && restartMethod !== 'prompt') {
+			// Automatic restart without prompt
+			const action = operation === 'install' ? 'installed' : operation === 'update' ? 'updated' : 'uninstalled';
+			
+			vscode.window.showInformationMessage(
+				`${extensionName} ${action} successfully. Restarting extensions...`
+			);
+			
+			setTimeout(async () => {
+				try {
+					if (restartMethod === 'extensionHost') {
+						await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
+						vscode.window.showInformationMessage('Extension host restarted successfully.');
+					} else {
+						await vscode.commands.executeCommand('workbench.action.reloadWindow');
+					}
+				} catch (error) {
+					console.error('Error during automatic restart:', error);
+					vscode.window.showWarningMessage(
+						'Failed to restart automatically. Please reload the window manually.'
+					);
+				}
+			}, 1000);
+		} else {
+			// Prompt user for restart method
+			const action = operation === 'install' ? 'installed' : operation === 'update' ? 'updated' : 'uninstalled';
+			const choice = await vscode.window.showInformationMessage(
+				`${extensionName} ${action} successfully. Choose how to apply changes:`,
+				'Restart Extensions',
+				'Reload Window',
+				'Later'
+			);
+
+			switch (choice) {
+				case 'Restart Extensions':
+					try {
+						await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
+						vscode.window.showInformationMessage('Extension host restarted successfully.');
+					} catch (error) {
+						console.warn('Extension host restart failed, offering reload option:', error);
+						const fallbackChoice = await vscode.window.showWarningMessage(
+							'Extension host restart failed. Reload the window instead?',
+							'Reload Window',
+							'Cancel'
+						);
+						if (fallbackChoice === 'Reload Window') {
+							await vscode.commands.executeCommand('workbench.action.reloadWindow');
+						}
+					}
+					break;
+				case 'Reload Window':
+					await vscode.commands.executeCommand('workbench.action.reloadWindow');
+					break;
+				case 'Later':
+					vscode.window.showInformationMessage(
+						'Extension changes will take effect after the next window reload.',
+						'Reload Now'
+					).then(choice => {
+						if (choice === 'Reload Now') {
+							vscode.commands.executeCommand('workbench.action.reloadWindow');
+						}
+					});
+					break;
+			}
+		}
+	}
+
 	public async showExtensionDetails(filePath: string): Promise<void> {
 		try {
 			const extensionInfo = this._findExtensionByFilePath(filePath);
@@ -90,6 +165,11 @@ export class ExtensionDetailsProvider {
 							break;
 						case 'uninstallExtension':
 							this._handleUninstallExtension(extensionInfo.id, panel);
+							break;
+						case 'showError':
+							if (message.message) {
+								vscode.window.showErrorMessage(message.message);
+							}
 							break;
 					}
 				}
@@ -155,20 +235,29 @@ export class ExtensionDetailsProvider {
 
 	private async _handleInstallExtension(extensionInfo: ExtensionInfo, panel: vscode.WebviewPanel): Promise<void> {
 		try {
-			const success = await this._storageProvider.installExtension(extensionInfo);
-			if (success) {
-				// Get updated extension info and refresh the panel
-				const updatedExtensionInfo = this._storageProvider.getExtensionById(extensionInfo.id);
-				if (updatedExtensionInfo) {
-					const extensionDetails = this._buildExtensionDetails(updatedExtensionInfo);
-					panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
-				}
+			// Send immediate success feedback to update UI
+			panel.webview.postMessage({
+				command: 'installComplete',
+				success: true
+			});
 
+			// Wait a moment for UI to update
+			await new Promise(resolve => setTimeout(resolve, 500));
+
+			// Perform the installation (which will trigger restart)
+			const success = await this._storageProvider.installExtension(extensionInfo);
+			
+			if (!success) {
+				// If installation failed, revert the UI
 				panel.webview.postMessage({
 					command: 'installComplete',
-					success: true
+					success: false,
+					error: 'Installation failed'
 				});
 			}
+
+			// Note: StorageProvider.installExtension handles the restart, so the window
+			// will reload/restart before we can update the panel content
 		} catch (error) {
 			console.error('Error installing extension from details view:', error);
 			panel.webview.postMessage({
@@ -181,19 +270,29 @@ export class ExtensionDetailsProvider {
 
 	private async _handleUninstallExtension(extensionId: string, panel: vscode.WebviewPanel): Promise<void> {
 		try {
-			const success = await this._storageProvider.uninstallExtension(extensionId);
-			if (success) {
-				const updatedExtensionInfo = this._storageProvider.getExtensionById(extensionId);
-				if (updatedExtensionInfo) {
-					const extensionDetails = this._buildExtensionDetails(updatedExtensionInfo);
-					panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
-				}
+			// Send immediate success feedback to update UI
+			panel.webview.postMessage({
+				command: 'uninstallComplete',
+				success: true
+			});
 
+			// Wait a moment for UI to update
+			await new Promise(resolve => setTimeout(resolve, 500));
+
+			// Perform the uninstallation (which will trigger restart)
+			const success = await this._storageProvider.uninstallExtension(extensionId);
+			
+			if (!success) {
+				// If uninstallation failed, revert the UI
 				panel.webview.postMessage({
 					command: 'uninstallComplete',
-					success: true
+					success: false,
+					error: 'Uninstallation failed'
 				});
 			}
+
+			// Note: StorageProvider.uninstallExtension handles the restart, so the window
+			// will reload/restart before we can update the panel content
 		} catch (error) {
 			console.error('Error uninstalling extension from details view:', error);
 			panel.webview.postMessage({
@@ -371,6 +470,13 @@ export class ExtensionDetailsProvider {
 									This extension is installed from a local VSIX file. Updates must be done manually by replacing the VSIX file and reinstalling.
 								</div>
 							</div>
+							
+							<div class="troubleshooting-item">
+								<div class="troubleshooting-title">Extension Restart:</div>
+								<div class="troubleshooting-content">
+									After installing, updating, or uninstalling, VS Code will prompt to restart extensions or reload the window for changes to take effect.
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -526,7 +632,10 @@ export class ExtensionDetailsProvider {
 			const settingsGear = document.getElementById('settings-gear');
 			if (settingsGear) {
 				settingsGear.addEventListener('click', () => {
-					console.log('Settings gear clicked');
+					vscode.postMessage({
+						command: 'openUrl',
+						url: 'command:workbench.action.openSettings?%5B%22privateExtensionsSidebar%22%5D'
+					});
 				});
 			}
 		});
@@ -543,9 +652,22 @@ export class ExtensionDetailsProvider {
 						if (message.success) {
 							installBtn.innerHTML = '<span class="codicon codicon-check"></span> Installed!';
 							installBtn.style.backgroundColor = 'var(--vscode-charts-green)';
+							installBtn.disabled = true;
+							
+							// Show message about restart
+							const restartMsg = document.createElement('div');
+							restartMsg.style.cssText = 'margin-top: 8px; padding: 8px; background-color: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 12px;';
+							restartMsg.innerHTML = '<span class="codicon codicon-info"></span> Extension will be activated after restart.';
+							installBtn.parentNode.appendChild(restartMsg);
 						} else {
 							installBtn.innerHTML = '<span class="codicon codicon-cloud-download"></span> Install';
 							installBtn.disabled = false;
+							if (message.error) {
+								vscode.postMessage({
+									command: 'showError',
+									message: message.error
+								});
+							}
 						}
 					}
 					
@@ -553,9 +675,22 @@ export class ExtensionDetailsProvider {
 						if (message.success) {
 							updateBtn.innerHTML = '<span class="codicon codicon-check"></span> Updated!';
 							updateBtn.style.backgroundColor = 'var(--vscode-charts-green)';
+							updateBtn.disabled = true;
+							
+							// Show message about restart
+							const restartMsg = document.createElement('div');
+							restartMsg.style.cssText = 'margin-top: 8px; padding: 8px; background-color: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 12px;';
+							restartMsg.innerHTML = '<span class="codicon codicon-info"></span> Extension will be updated after restart.';
+							updateBtn.parentNode.appendChild(restartMsg);
 						} else {
 							updateBtn.innerHTML = '<span class="codicon codicon-arrow-up"></span> Update';
 							updateBtn.disabled = false;
+							if (message.error) {
+								vscode.postMessage({
+									command: 'showError',
+									message: message.error
+								});
+							}
 						}
 					}
 					break;
@@ -566,9 +701,22 @@ export class ExtensionDetailsProvider {
 						if (message.success) {
 							uninstallBtn.innerHTML = '<span class="codicon codicon-check"></span> Uninstalled!';
 							uninstallBtn.style.backgroundColor = 'var(--vscode-charts-green)';
+							uninstallBtn.disabled = true;
+							
+							// Show message about restart
+							const restartMsg = document.createElement('div');
+							restartMsg.style.cssText = 'margin-top: 8px; padding: 8px; background-color: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 12px;';
+							restartMsg.innerHTML = '<span class="codicon codicon-info"></span> Extension will be deactivated after restart.';
+							uninstallBtn.parentNode.appendChild(restartMsg);
 						} else {
 							uninstallBtn.innerHTML = '<span class="codicon codicon-trash"></span> Uninstall';
 							uninstallBtn.disabled = false;
+							if (message.error) {
+								vscode.postMessage({
+									command: 'showError',
+									message: message.error
+								});
+							}
 						}
 					}
 					break;
@@ -585,6 +733,17 @@ export class ExtensionDetailsProvider {
 					openUrl(href);
 				}
 			}
+		});
+		
+		// Handle resource links
+		document.querySelectorAll('.resource-link').forEach(link => {
+			link.addEventListener('click', function(e) {
+				e.preventDefault();
+				const href = this.getAttribute('href');
+				if (href) {
+					openUrl(href);
+				}
+			});
 		});
 	</script>
 </body>

@@ -71,6 +71,165 @@ export class StorageProvider {
 		});
 	}
 
+	/**
+	 * Triggers VS Code to restart extensions
+	 */
+	private async triggerExtensionRestart(): Promise<void> {
+		try {
+			// Option 1: Use the reload window command (most reliable)
+			const reloadChoice = await vscode.window.showInformationMessage(
+				'Extension changes require reloading the window to take effect.',
+				'Reload Window',
+				'Later'
+			);
+
+			if (reloadChoice === 'Reload Window') {
+				await vscode.commands.executeCommand('workbench.action.reloadWindow');
+				return;
+			}
+
+			// Option 2: Alternative - restart extension host (if reload is declined)
+			// This is less intrusive but may not work for all extensions
+			try {
+				await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
+				vscode.window.showInformationMessage('Extension host restarted successfully.');
+			} catch (error) {
+				console.warn('Extension host restart failed, suggesting manual reload:', error);
+				vscode.window.showWarningMessage(
+					'Please reload the window manually for changes to take effect.',
+					'Reload Now'
+				).then(choice => {
+					if (choice === 'Reload Now') {
+						vscode.commands.executeCommand('workbench.action.reloadWindow');
+					}
+				});
+			}
+		} catch (error) {
+			console.error('Error triggering extension restart:', error);
+			vscode.window.showWarningMessage(
+				'Unable to restart extensions automatically. Please reload the window manually for changes to take effect.'
+			);
+		}
+	}
+
+	/**
+	 * Alternative method for automatic restart with user preference
+	 */
+	private async handleExtensionRestart(operation: 'install' | 'update' | 'uninstall', extensionName: string): Promise<void> {
+		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+		const autoRestart = config.get<boolean>('autoRestartAfterInstall', false);
+
+		if (autoRestart) {
+			// Automatic restart without prompt
+			vscode.window.showInformationMessage(
+				`${extensionName} ${operation}ed successfully. Restarting extensions...`
+			);
+			
+			setTimeout(async () => {
+				try {
+					await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
+				} catch (error) {
+					await vscode.commands.executeCommand('workbench.action.reloadWindow');
+				}
+			}, 1000);
+		} else {
+			// Prompt user for restart
+			const action = operation === 'install' ? 'installed' : operation === 'update' ? 'updated' : 'uninstalled';
+			const choice = await vscode.window.showInformationMessage(
+				`${extensionName} ${action} successfully. Restart extensions to take effect?`,
+				'Restart Extensions',
+				'Reload Window',
+				'Later'
+			);
+
+			switch (choice) {
+				case 'Restart Extensions':
+					try {
+						await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
+						vscode.window.showInformationMessage('Extension host restarted successfully.');
+					} catch (error) {
+						console.warn('Extension host restart failed, falling back to reload:', error);
+						await vscode.commands.executeCommand('workbench.action.reloadWindow');
+					}
+					break;
+				case 'Reload Window':
+					await vscode.commands.executeCommand('workbench.action.reloadWindow');
+					break;
+			}
+		}
+	}
+
+	public async installExtension(extensionInfo: ExtensionInfo): Promise<boolean> {
+		try {
+			await vscode.commands.executeCommand('workbench.extensions.installExtension',
+				vscode.Uri.file(extensionInfo.filePath));
+
+			extensionInfo.isInstalled = true;
+			extensionInfo.hasUpdate = false;
+			this._extensionCache.set(extensionInfo.id, extensionInfo);
+
+			// Show success message first, before restart
+			vscode.window.showInformationMessage(`Successfully installed ${extensionInfo.title}`);
+
+			// Schedule scan after installation but before restart
+			setTimeout(() => {
+				this.scanAllDirectories();
+			}, 500);
+
+			// Trigger extension restart after a brief delay
+			setTimeout(async () => {
+				await this.handleExtensionRestart('install', extensionInfo.title);
+			}, 1000);
+
+			return true;
+		} catch (error) {
+			console.error('Error installing extension:', error);
+			vscode.window.showErrorMessage(`Failed to install ${extensionInfo.title}: ${error}`);
+			return false;
+		}
+	}
+
+	public async uninstallExtension(extensionId: string): Promise<boolean> {
+		try {
+			const extension = vscode.extensions.getExtension(extensionId);
+			if (!extension) {
+				vscode.window.showWarningMessage('Extension not found or already uninstalled');
+				return false;
+			}
+
+			const extensionName = extension.packageJSON.displayName || extension.packageJSON.name || extensionId;
+
+			await vscode.commands.executeCommand('workbench.extensions.uninstallExtension', extensionId);
+
+			const cachedExtension = this._extensionCache.get(extensionId);
+			if (cachedExtension) {
+				cachedExtension.isInstalled = false;
+				cachedExtension.hasUpdate = false;
+				this._extensionCache.set(extensionId, cachedExtension);
+			}
+
+			// Show success message first, before restart
+			vscode.window.showInformationMessage(`Successfully uninstalled extension`);
+
+			// Schedule scan after uninstallation but before restart
+			setTimeout(() => {
+				this.scanAllDirectories();
+			}, 500);
+
+			// Trigger extension restart after a brief delay
+			setTimeout(async () => {
+				await this.handleExtensionRestart('uninstall', extensionName);
+			}, 1000);
+
+			return true;
+		} catch (error) {
+			console.error('Error uninstalling extension:', error);
+			vscode.window.showErrorMessage(`Failed to uninstall extension: ${error}`);
+			return false;
+		}
+	}
+
+	// Rest of the class remains the same...
 	private async initialize(): Promise<void> {
 		console.log('StorageProvider: initialize() called, _isInitialized:', this._isInitialized, '_initializationAttempted:', this._initializationAttempted);
 		
@@ -194,58 +353,6 @@ export class StorageProvider {
 	public isExtensionInstalled(extensionId: string): boolean {
 		const extension = vscode.extensions.getExtension(extensionId);
 		return !!extension;
-	}
-
-	public async installExtension(extensionInfo: ExtensionInfo): Promise<boolean> {
-		try {
-			await vscode.commands.executeCommand('workbench.extensions.installExtension',
-				vscode.Uri.file(extensionInfo.filePath));
-
-			extensionInfo.isInstalled = true;
-			extensionInfo.hasUpdate = false;
-			this._extensionCache.set(extensionInfo.id, extensionInfo);
-
-			setTimeout(() => {
-				this.scanAllDirectories();
-			}, 1000);
-
-			vscode.window.showInformationMessage(`Successfully installed ${extensionInfo.title}`);
-			return true;
-		} catch (error) {
-			console.error('Error installing extension:', error);
-			vscode.window.showErrorMessage(`Failed to install ${extensionInfo.title}: ${error}`);
-			return false;
-		}
-	}
-
-	public async uninstallExtension(extensionId: string): Promise<boolean> {
-		try {
-			const extension = vscode.extensions.getExtension(extensionId);
-			if (!extension) {
-				vscode.window.showWarningMessage('Extension not found or already uninstalled');
-				return false;
-			}
-
-			await vscode.commands.executeCommand('workbench.extensions.uninstallExtension', extensionId);
-
-			const cachedExtension = this._extensionCache.get(extensionId);
-			if (cachedExtension) {
-				cachedExtension.isInstalled = false;
-				cachedExtension.hasUpdate = false;
-				this._extensionCache.set(extensionId, cachedExtension);
-			}
-
-			setTimeout(() => {
-				this.scanAllDirectories();
-			}, 1000);
-
-			vscode.window.showInformationMessage(`Successfully uninstalled extension`);
-			return true;
-		} catch (error) {
-			console.error('Error uninstalling extension:', error);
-			vscode.window.showErrorMessage(`Failed to uninstall extension: ${error}`);
-			return false;
-		}
 	}
 
 	public async refresh(): Promise<ExtensionInfo[]> {

@@ -134,6 +134,21 @@
           ],
           "default": "ascending",
           "description": "Sort order for extensions"
+        },
+        "privateExtensionsSidebar.autoRestartAfterInstall": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically restart extensions after install/update/uninstall operations without prompting"
+        },
+        "privateExtensionsSidebar.restartMethod": {
+          "type": "string",
+          "enum": [
+            "extensionHost",
+            "reloadWindow",
+            "prompt"
+          ],
+          "default": "prompt",
+          "description": "Method to use for restarting extensions: 'extensionHost' (fastest), 'reloadWindow' (most reliable), or 'prompt' (ask user)"
         }
       }
     }
