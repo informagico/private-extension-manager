@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { marked } from 'marked';
 import { VsixParser } from './vsixParser';
 import { VsixUtils } from './vsixUtils';
 
@@ -29,7 +30,9 @@ export class ExtensionDetailsProvider {
 	private _panel?: vscode.WebviewPanel;
 	private _extensionDetails?: ExtensionDetails;
 
-	constructor(private readonly _extensionUri: vscode.Uri) {}
+	constructor(private readonly _extensionUri: vscode.Uri) {
+		// Simple marked configuration that should work with any version
+	}
 
 	public async showExtensionDetails(filePath: string): Promise<void> {
 		try {
@@ -95,12 +98,18 @@ export class ExtensionDetailsProvider {
 
 				this._panel.webview.onDidReceiveMessage(
 					message => {
+						console.log('Received message in extension:', message);
 						switch (message.command) {
 							case 'openUrl':
 								if (message.url) {
+									console.log('Opening external URL:', message.url);
 									vscode.env.openExternal(vscode.Uri.parse(message.url));
+								} else {
+									console.error('No URL provided in openUrl message');
 								}
 								break;
+							default:
+								console.log('Unknown message command:', message.command);
 						}
 					}
 				);
@@ -151,9 +160,14 @@ export class ExtensionDetailsProvider {
 
 		const nonce = this._getNonce();
 
-		// Convert markdown to HTML (simple conversion)
-		const readmeHtml = details.readme ? this._markdownToHtml(details.readme) : '<p>No README.md found in this extension.</p>';
-		const changelogHtml = details.changelog ? this._markdownToHtml(details.changelog) : '<p>No CHANGELOG.md found in this extension.</p>';
+		// Convert markdown to HTML using marked
+		let readmeHtml = details.readme ? 
+			marked.parse(details.readme) : 
+			'<p>No README.md found in this extension.</p>';
+		
+		let changelogHtml = details.changelog ? 
+			marked.parse(details.changelog) : 
+			'<p>No CHANGELOG.md found in this extension.</p>';
 
 		return `<!DOCTYPE html>
 <html lang="en">
@@ -308,6 +322,10 @@ export class ExtensionDetailsProvider {
 			padding-left: 24px;
 		}
 		
+		.markdown-content li {
+			margin: 4px 0;
+		}
+		
 		.markdown-content code {
 			background-color: var(--vscode-textBlockQuote-background);
 			color: var(--vscode-textPreformat-foreground);
@@ -344,6 +362,31 @@ export class ExtensionDetailsProvider {
 		.markdown-content a:hover {
 			text-decoration: underline;
 		}
+
+		.markdown-content table {
+			border-collapse: collapse;
+			width: 100%;
+			margin: 12px 0;
+		}
+
+		.markdown-content th,
+		.markdown-content td {
+			border: 1px solid var(--vscode-panel-border);
+			padding: 8px 12px;
+			text-align: left;
+		}
+
+		.markdown-content th {
+			background-color: var(--vscode-textBlockQuote-background);
+			font-weight: bold;
+		}
+
+		.markdown-content hr {
+			border: none;
+			height: 1px;
+			background-color: var(--vscode-panel-border);
+			margin: 20px 0;
+		}
 		
 		.categories-keywords {
 			display: flex;
@@ -372,6 +415,15 @@ export class ExtensionDetailsProvider {
 			margin-top: 12px;
 			font-size: 12px;
 			color: var(--vscode-descriptionForeground);
+		}
+
+		.image-placeholder {
+			background-color: var(--vscode-textBlockQuote-background);
+			color: var(--vscode-descriptionForeground);
+			padding: 8px 12px;
+			border-radius: 4px;
+			margin: 8px 0;
+			font-style: italic;
 		}
 	</style>
 </head>
@@ -472,53 +524,43 @@ export class ExtensionDetailsProvider {
 		
 		// Open URL function
 		function openUrl(url) {
-			vscode.postMessage({
-				command: 'openUrl',
-				url: url
-			});
+			console.log('Opening URL:', url);
+			try {
+				vscode.postMessage({
+					command: 'openUrl',
+					url: url
+				});
+			} catch (error) {
+				console.error('Error opening URL:', error);
+			}
 		}
 		
 		// Make openUrl available globally
 		window.openUrl = openUrl;
+		
+		// Debug: Log when script loads
+		console.log('Extension details script loaded');
+		console.log('Available functions:', typeof window.openUrl);
+		
+		// Add click handler for all links as fallback
+		document.addEventListener('click', function(e) {
+			const link = e.target.closest('a');
+			if (link && link.getAttribute('href') === '#' && link.onclick) {
+				// Let the onclick handler work
+				return;
+			} else if (link && link.href && !link.href.startsWith('javascript:')) {
+				// Fallback for any missed links
+				e.preventDefault();
+				const href = link.getAttribute('href') || link.href;
+				if (href && href !== '#') {
+					console.log('Fallback link handler:', href);
+					openUrl(href);
+				}
+			}
+		});
 	</script>
 </body>
 </html>`;
-	}
-
-	private _markdownToHtml(markdown: string): string {
-		// Basic markdown to HTML conversion
-		let html = markdown
-			// Headers
-			.replace(/^### (.*$)/gim, '<h3>$1</h3>')
-			.replace(/^## (.*$)/gim, '<h2>$1</h2>')
-			.replace(/^# (.*$)/gim, '<h1>$1</h1>')
-			// Bold
-			.replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-			.replace(/__(.*?)__/gim, '<strong>$1</strong>')
-			// Italic
-			.replace(/\*(.*?)\*/gim, '<em>$1</em>')
-			.replace(/_(.*?)_/gim, '<em>$1</em>')
-			// Code blocks
-			.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
-			// Inline code
-			.replace(/`([^`]+)`/gim, '<code>$1</code>')
-			// Links
-			.replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" onclick="openUrl(\'$2\'); return false;">$1</a>')
-			// Line breaks
-			.replace(/\n\n/gim, '</p><p>')
-			.replace(/\n/gim, '<br>');
-
-		// Wrap in paragraphs
-		html = '<p>' + html + '</p>';
-
-		// Clean up empty paragraphs
-		html = html.replace(/<p><\/p>/gim, '');
-		html = html.replace(/<p><h([1-6])>/gim, '<h$1>');
-		html = html.replace(/<\/h([1-6])><\/p>/gim, '</h$1>');
-		html = html.replace(/<p><pre>/gim, '<pre>');
-		html = html.replace(/<\/pre><\/p>/gim, '</pre>');
-
-		return html;
 	}
 
 	private _getNonce(): string {
