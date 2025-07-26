@@ -428,15 +428,6 @@ body {
 	animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-	from {
-		transform: rotate(0deg);
-	}
-	to {
-		transform: rotate(360deg);
-	}
-}
-
 /* Status indicators */
 .item.installed {
 	border-left: 3px solid var(--vscode-charts-green);
