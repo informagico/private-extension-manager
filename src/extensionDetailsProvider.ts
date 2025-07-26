@@ -24,6 +24,8 @@ export interface ExtensionDetails {
 	homepage?: string;
 	license?: string;
 	engines?: { [key: string]: string };
+	isInstalled: boolean;
+	hasUpdate?: boolean;
 }
 
 export class ExtensionDetailsProvider {
@@ -36,7 +38,6 @@ export class ExtensionDetailsProvider {
 
 	public async showExtensionDetails(filePath: string): Promise<void> {
 		try {
-			// Get the already-parsed extension data
 			const extensionInfo = this._findExtensionByFilePath(filePath);
 
 			if (!extensionInfo) {
@@ -44,10 +45,8 @@ export class ExtensionDetailsProvider {
 				return;
 			}
 
-			// Build extension details from cached data
 			const extensionDetails = this._buildExtensionDetails(extensionInfo);
 
-			// create a new panel
 			const panelKey = `${extensionInfo.id}_${Date.now()}`;
 			const panel = vscode.window.createWebviewPanel(
 				'extensionDetails',
@@ -60,7 +59,6 @@ export class ExtensionDetailsProvider {
 				}
 			);
 
-			// Store the panel
 			this._activePanels.set(panelKey, panel);
 
 			panel.onDidDispose(() => {
@@ -69,14 +67,10 @@ export class ExtensionDetailsProvider {
 
 			panel.webview.onDidReceiveMessage(
 				message => {
-					console.log('Received message in extension:', message);
 					switch (message.command) {
 						case 'openUrl':
 							if (message.url) {
-								console.log('Opening external URL:', message.url);
 								vscode.env.openExternal(vscode.Uri.parse(message.url));
-							} else {
-								console.error('No URL provided in openUrl message');
 							}
 							break;
 						case 'installExtension':
@@ -85,13 +79,10 @@ export class ExtensionDetailsProvider {
 						case 'uninstallExtension':
 							this._handleUninstallExtension(extensionInfo.id, panel);
 							break;
-						default:
-							console.log('Unknown message command:', message.command);
 					}
 				}
 			);
 
-			// Set the webview content for this specific panel
 			panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
 
 		} catch (error) {
@@ -100,20 +91,12 @@ export class ExtensionDetailsProvider {
 		}
 	}
 
-	/**
-	 * Find extension by file path in the storage provider cache
-	 */
 	private _findExtensionByFilePath(filePath: string): ExtensionInfo | null {
-		// Search through all cached extensions to find one with matching file path
 		const allExtensions = this._storageProvider.searchExtensions('');
-
 		const extension = allExtensions.find(ext => ext.filePath === filePath);
 		return extension || null;
 	}
 
-	/**
-	 * Build ExtensionDetails from cached ExtensionInfo (no re-parsing)
-	 */
 	private _buildExtensionDetails(extensionInfo: ExtensionInfo): ExtensionDetails {
 		let bugsUrl: string | undefined;
 		if (extensionInfo.repository) {
@@ -124,7 +107,6 @@ export class ExtensionDetailsProvider {
 			}
 		}
 
-		// Handle bugs URL from package.json if available
 		if (extensionInfo.packageJsonRaw?.bugs) {
 			if (typeof extensionInfo.packageJsonRaw.bugs === 'string') {
 				bugsUrl = extensionInfo.packageJsonRaw.bugs;
@@ -153,22 +135,19 @@ export class ExtensionDetailsProvider {
 			bugs: bugsUrl,
 			homepage: extensionInfo.homepage,
 			license: extensionInfo.license,
-			engines: extensionInfo.engines
+			engines: extensionInfo.engines,
+			isInstalled: extensionInfo.isInstalled,
+			hasUpdate: extensionInfo.hasUpdate
 		};
 	}
 
-	/**
-	 * Handle extension installation from details view
-	 */
 	private async _handleInstallExtension(extensionInfo: ExtensionInfo, panel: vscode.WebviewPanel): Promise<void> {
 		try {
 			const success = await this._storageProvider.installExtension(extensionInfo);
 			if (success) {
-				// Update the webview to reflect new installation status
 				const extensionDetails = this._buildExtensionDetails(extensionInfo);
 				panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
 
-				// Send message to update UI immediately
 				panel.webview.postMessage({
 					command: 'installComplete',
 					success: true
@@ -184,21 +163,16 @@ export class ExtensionDetailsProvider {
 		}
 	}
 
-	/**
-	 * Handle extension uninstallation from details view
-	 */
 	private async _handleUninstallExtension(extensionId: string, panel: vscode.WebviewPanel): Promise<void> {
 		try {
 			const success = await this._storageProvider.uninstallExtension(extensionId);
 			if (success) {
-				// Find updated extension info
 				const updatedExtensionInfo = this._storageProvider.getExtensionById(extensionId);
 				if (updatedExtensionInfo) {
 					const extensionDetails = this._buildExtensionDetails(updatedExtensionInfo);
 					panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
 				}
 
-				// Send message to update UI immediately
 				panel.webview.postMessage({
 					command: 'uninstallComplete',
 					success: true
@@ -221,7 +195,6 @@ export class ExtensionDetailsProvider {
 
 		const nonce = this._getNonce();
 
-		// Convert markdown to HTML using marked
 		let readmeHtml = details.readme ?
 			marked.parse(details.readme) :
 			'<p>No README.md found in this extension.</p>';
@@ -230,8 +203,45 @@ export class ExtensionDetailsProvider {
 			marked.parse(details.changelog) :
 			'<p>No CHANGELOG.md found in this extension.</p>';
 
-		// Check if extension is currently installed
-		const isInstalled = this._storageProvider.isExtensionInstalled(details.id);
+		const getStatusDisplay = () => {
+			if (!details.isInstalled) {
+				return {
+					badge: '<span class="status-badge not-installed">Not Installed</span>',
+					buttons: `
+						<button class="install-button" id="install-btn">
+							<span class="codicon codicon-cloud-download"></span>
+							Install
+						</button>
+					`
+				};
+			} else if (details.hasUpdate) {
+				return {
+					badge: '<span class="status-badge installed">Installed</span> <span class="status-badge" style="background-color: var(--vscode-badge-background); color: var(--vscode-badge-foreground); margin-left: 8px;">Update Available</span>',
+					buttons: `
+						<button class="install-button update-button" id="update-btn">
+							<span class="codicon codicon-arrow-up"></span>
+							Update
+						</button>
+						<button class="uninstall-button" id="uninstall-btn">
+							<span class="codicon codicon-trash"></span>
+							Uninstall
+						</button>
+					`
+				};
+			} else {
+				return {
+					badge: '<span class="status-badge installed">Installed</span>',
+					buttons: `
+						<button class="uninstall-button" id="uninstall-btn">
+							<span class="codicon codicon-trash"></span>
+							Uninstall
+						</button>
+					`
+				};
+			}
+		};
+
+		const statusDisplay = getStatusDisplay();
 
 		return `<!DOCTYPE html>
 <html lang="en">
@@ -245,7 +255,6 @@ export class ExtensionDetailsProvider {
 	<title>Extension Details</title>
 </head>
 <body class="extension-details-container">
-	<!-- Header Section -->
 	<div class="extension-header">
 		<div class="extension-header-content">
 			<div class="extension-icon-container">
@@ -264,24 +273,13 @@ export class ExtensionDetailsProvider {
 				</div>
 				<div class="extension-description">${details.description}</div>
 				<div class="extension-actions">
-					${!isInstalled ? `
-						<button class="install-button" id="install-btn">
-							<span class="codicon codicon-cloud-download"></span>
-							Install
-						</button>
-					` : `
-						<button class="uninstall-button" id="uninstall-btn">
-							<span class="codicon codicon-trash"></span>
-							Uninstall
-						</button>
-					`}
+					${statusDisplay.buttons}
 					<span class="settings-gear codicon codicon-gear" id="settings-gear"></span>
 				</div>
 			</div>
 		</div>
 	</div>
 
-	<!-- Sidebar -->
 	<div class="extension-sidebar">
 		<div class="sidebar-section">
 			<div class="sidebar-content">
@@ -299,9 +297,7 @@ export class ExtensionDetailsProvider {
 				</div>
 				<div class="metadata-item">
 					<span class="metadata-label">Status</span><br>
-					<span class="status-badge ${isInstalled ? 'installed' : 'not-installed'}">
-						${isInstalled ? 'Installed' : 'Not Installed'}
-					</span>
+					${statusDisplay.badge}
 				</div>
 			</div>
 		</div>
@@ -321,9 +317,9 @@ export class ExtensionDetailsProvider {
 			<div class="sidebar-title">Resources</div>
 			<div class="sidebar-content">
 				<div class="resources-list">
-					${details.homepage ? `<a href="#" class="resource-link" data-url="${details.homepage}">Homepage</a>` : ''}
-					${details.repository ? `<a href="#" class="resource-link" data-url="${details.repository}">Repository</a>` : ''}
-					${details.bugs ? `<a href="#" class="resource-link" data-url="${details.bugs}">Report Issues</a>` : ''}
+					${details.homepage ? `<a href="${details.homepage}" class="resource-link">Homepage</a>` : ''}
+					${details.repository ? `<a href="${details.repository}" class="resource-link">Repository</a>` : ''}
+					${details.bugs ? `<a href="${details.bugs}" class="resource-link">Report Issues</a>` : ''}
 					${details.license ? `<div class="resource-item">License: ${details.license}</div>` : ''}
 				</div>
 			</div>
@@ -350,7 +346,6 @@ export class ExtensionDetailsProvider {
 		</div>
 	</div>
 
-	<!-- Main Content -->
 	<div class="main-content">
 		<div class="tabs-container">
 			<div class="tabs-header">
@@ -404,25 +399,20 @@ export class ExtensionDetailsProvider {
 	<script nonce="${nonce}">
 		const vscode = acquireVsCodeApi();
 		
-		// Tab switching
 		document.querySelectorAll('.tab-button').forEach(button => {
 			button.addEventListener('click', () => {
 				const tabName = button.dataset.tab;
 				
-				// Update active button
 				document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
 				button.classList.add('active');
 				
-				// Update active content
 				document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 				document.getElementById(tabName + '-tab').classList.add('active');
 			});
 		});
 		
-		// Open URL function
 		function openUrl(url) {
-			if (url === '#') return; // Skip placeholder links
-			console.log('Opening URL:', url);
+			if (url === '#') return;
 			try {
 				vscode.postMessage({
 					command: 'openUrl',
@@ -433,7 +423,6 @@ export class ExtensionDetailsProvider {
 			}
 		}
 		
-		// Install extension function
 		function installExtension() {
 			const button = document.getElementById('install-btn');
 			if (button) {
@@ -445,8 +434,19 @@ export class ExtensionDetailsProvider {
 				command: 'installExtension'
 			});
 		}
+
+		function updateExtension() {
+			const button = document.getElementById('update-btn');
+			if (button) {
+				button.innerHTML = '<span class="codicon codicon-sync spin"></span> Updating...';
+				button.disabled = true;
+			}
+			
+			vscode.postMessage({
+				command: 'installExtension'
+			});
+		}
 		
-		// Uninstall extension function
 		function uninstallExtension() {
 			const button = document.getElementById('uninstall-btn');
 			if (button) {
@@ -459,55 +459,55 @@ export class ExtensionDetailsProvider {
 			});
 		}
 		
-		// Event listeners setup
 		document.addEventListener('DOMContentLoaded', () => {
-			// Install button
 			const installBtn = document.getElementById('install-btn');
 			if (installBtn) {
 				installBtn.addEventListener('click', installExtension);
 			}
 			
-			// Uninstall button
+			const updateBtn = document.getElementById('update-btn');
+			if (updateBtn) {
+				updateBtn.addEventListener('click', updateExtension);
+			}
+			
 			const uninstallBtn = document.getElementById('uninstall-btn');
 			if (uninstallBtn) {
 				uninstallBtn.addEventListener('click', uninstallExtension);
 			}
 			
-			// Settings gear
 			const settingsGear = document.getElementById('settings-gear');
 			if (settingsGear) {
 				settingsGear.addEventListener('click', () => {
 					console.log('Settings gear clicked');
 				});
 			}
-			
-			// Resource links
-			document.querySelectorAll('.resource-link[data-url]').forEach(link => {
-				link.addEventListener('click', (e) => {
-					e.preventDefault();
-					const url = link.getAttribute('data-url');
-					if (url) {
-						openUrl(url);
-					}
-				});
-			});
 		});
 		
-		// Handle messages from extension
 		window.addEventListener('message', event => {
 			const message = event.data;
 			
 			switch (message.command) {
 				case 'installComplete':
 					const installBtn = document.getElementById('install-btn');
+					const updateBtn = document.getElementById('update-btn');
+					
 					if (installBtn) {
 						if (message.success) {
-							// Button will be replaced by page refresh, but provide immediate feedback
 							installBtn.innerHTML = '<span class="codicon codicon-check"></span> Installed!';
 							installBtn.style.backgroundColor = 'var(--vscode-charts-green)';
 						} else {
 							installBtn.innerHTML = '<span class="codicon codicon-cloud-download"></span> Install';
 							installBtn.disabled = false;
+						}
+					}
+					
+					if (updateBtn) {
+						if (message.success) {
+							updateBtn.innerHTML = '<span class="codicon codicon-check"></span> Updated!';
+							updateBtn.style.backgroundColor = 'var(--vscode-charts-green)';
+						} else {
+							updateBtn.innerHTML = '<span class="codicon codicon-arrow-up"></span> Update';
+							updateBtn.disabled = false;
 						}
 					}
 					break;
@@ -527,18 +527,12 @@ export class ExtensionDetailsProvider {
 			}
 		});
 		
-		// Debug: Log when script loads
-		console.log('Extension details script loaded');
-		
-		// Add click handler for markdown links
 		document.addEventListener('click', function(e) {
 			const link = e.target.closest('a');
 			if (link && link.href && !link.href.startsWith('javascript:') && link.href !== window.location.href + '#') {
-				// Handle external links in markdown content
 				e.preventDefault();
 				const href = link.getAttribute('href') || link.href;
 				if (href && href !== '#' && !href.startsWith('javascript:')) {
-					console.log('Markdown link handler:', href);
 					openUrl(href);
 				}
 			}
@@ -548,9 +542,6 @@ export class ExtensionDetailsProvider {
 </html>`;
 	}
 
-	/**
-	 * Helper to shorten file paths for display
-	 */
 	private _shortenPath(filePath: string): string {
 		const maxLength = 50;
 		if (filePath.length <= maxLength) {
@@ -564,7 +555,7 @@ export class ExtensionDetailsProvider {
 			return filePath;
 		}
 
-		const availableLength = maxLength - fileName.length - 3; // 3 for "..."
+		const availableLength = maxLength - fileName.length - 3;
 		const shortenedDir = directory.substring(0, availableLength);
 
 		return `${shortenedDir}...${fileName}`;
@@ -579,9 +570,6 @@ export class ExtensionDetailsProvider {
 		return text;
 	}
 
-	/**
-	 * Dispose all active panels
-	 */
 	public dispose(): void {
 		this._activePanels.forEach(panel => panel.dispose());
 		this._activePanels.clear();

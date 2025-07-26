@@ -71,7 +71,7 @@
 	color: var(--vscode-textLink-foreground);
 	font-size: 14px;
 	text-decoration: none;
-	cursor: pointer;
+	cursor: default;
 }
 
 .publisher-name:hover {
@@ -114,6 +114,16 @@
 
 .install-button:hover {
 	background-color: var(--vscode-button-hoverBackground);
+}
+
+.update-button {
+	background-color: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+}
+
+.update-button:hover {
+	background-color: var(--vscode-badge-background) !important;
+	opacity: 0.9;
 }
 
 .settings-gear {
@@ -200,17 +210,22 @@
 	text-decoration: none;
 	font-size: 13px;
 	padding: 4px 0;
+	display: block;
+	padding: 6px 0;
+	border-bottom: 1px solid transparent;
+	transition: border-color 0.2s;
 }
 
 .resource-link:hover {
 	text-decoration: underline;
+	border-bottom-color: var(--vscode-textLink-foreground);
 }
 
 .main-content {
 	max-width: 800px;
 	margin: 0 auto;
 	padding: 32px;
-	padding-right: 340px; /* Make room for sidebar */
+	padding-right: 340px;
 }
 
 .tabs-container {
@@ -379,7 +394,6 @@
 	margin: 16px 0;
 }
 
-/* Features section styling */
 .features-section {
 	margin-top: 32px;
 }
@@ -404,7 +418,6 @@
 	left: 0;
 }
 
-/* Troubleshooting section */
 .troubleshooting-section {
 	margin-top: 32px;
 }
@@ -428,7 +441,6 @@
 	line-height: 1.5;
 }
 
-/* Responsive design */
 @media (max-width: 1024px) {
 	.extension-sidebar {
 		position: static;
@@ -478,7 +490,6 @@
 	}
 }
 
-/* Loading and error states */
 .loading-state {
 	display: flex;
 	align-items: center;
@@ -497,7 +508,6 @@
 	margin: 20px;
 }
 
-/* Status badge styling */
 .status-badge {
 	display: inline-block;
 	padding: 2px 8px;
@@ -518,7 +528,6 @@
 	color: var(--vscode-editor-background);
 }
 
-/* Uninstall button styling */
 .uninstall-button {
 	background-color: var(--vscode-errorForeground);
 	color: var(--vscode-editor-background);
@@ -544,7 +553,6 @@
 	cursor: not-allowed;
 }
 
-/* Resource item styling (for license info, etc.) */
 .resource-item {
 	color: var(--vscode-descriptionForeground);
 	font-size: 13px;
@@ -558,7 +566,6 @@
 	margin-bottom: 0;
 }
 
-/* File path styling */
 .file-path {
 	font-family: var(--vscode-editor-font-family, 'Consolas', 'Courier New', monospace);
 	font-size: 11px;
@@ -570,7 +577,6 @@
 	cursor: help;
 }
 
-/* Improved spacing for metadata items */
 .metadata-item {
 	margin-bottom: 12px;
 }
@@ -579,13 +585,11 @@
 	margin-bottom: 0;
 }
 
-/* Enhanced troubleshooting section */
 .troubleshooting-item code {
 	display: inline-block;
 	margin: 2px 0;
 }
 
-/* Button loading state improvements */
 .install-button:disabled,
 .uninstall-button:disabled {
 	pointer-events: none;
@@ -596,7 +600,6 @@
 	animation: spin 1s linear infinite;
 }
 
-/* Success state for buttons */
 .install-button.success {
 	background-color: var(--vscode-charts-green) !important;
 }
@@ -605,7 +608,6 @@
 	background-color: var(--vscode-charts-green) !important;
 }
 
-/* Enhanced responsive design for sidebar */
 @media (max-width: 1200px) {
 	.extension-sidebar {
 		position: static;
@@ -646,13 +648,11 @@
 	}
 }
 
-/* Fix for very long extension IDs */
 .metadata-item {
 	word-break: break-word;
 	overflow-wrap: break-word;
 }
 
-/* Improve categories list spacing */
 .categories-list {
 	gap: 6px;
 }
@@ -661,19 +661,6 @@
 	margin-bottom: 4px;
 }
 
-/* Enhanced link styling */
-.resource-link {
-	display: block;
-	padding: 6px 0;
-	border-bottom: 1px solid transparent;
-	transition: border-color 0.2s;
-}
-
-.resource-link:hover {
-	border-bottom-color: var(--vscode-textLink-foreground);
-}
-
-/* Loading animation */
 @keyframes spin {
 	from {
 		transform: rotate(0deg);
