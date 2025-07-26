@@ -255,29 +255,22 @@ export class ExtensionDetailsProvider {
 
 	private async _handleInstallExtension(extensionInfo: ExtensionInfo, panel: vscode.WebviewPanel): Promise<void> {
 		try {
-			// Send immediate success feedback to update UI
-			panel.webview.postMessage({
-				command: 'installComplete',
-				success: true
-			});
-
-			// Wait a moment for UI to update
-			await new Promise(resolve => setTimeout(resolve, 500));
-
-			// Perform the installation (which will trigger restart)
+			// Perform the installation FIRST
 			const success = await this._storageProvider.installExtension(extensionInfo);
 			
+			// Only send success feedback AFTER the operation completes
+			panel.webview.postMessage({
+				command: 'installComplete',
+				success: success
+			});
+
 			if (!success) {
-				// If installation failed, revert the UI
-				panel.webview.postMessage({
-					command: 'installComplete',
-					success: false,
-					error: 'Installation failed'
-				});
+				// Installation failed - the UI will revert the button
+				console.error('Installation failed');
 			}
 
 			// Note: StorageProvider.installExtension handles the restart, so the window
-			// will reload/restart before we can update the panel content
+			// will reload/restart after this point
 		} catch (error) {
 			console.error('Error installing extension from details view:', error);
 			panel.webview.postMessage({
@@ -290,29 +283,22 @@ export class ExtensionDetailsProvider {
 
 	private async _handleUninstallExtension(extensionId: string, panel: vscode.WebviewPanel): Promise<void> {
 		try {
-			// Send immediate success feedback to update UI
-			panel.webview.postMessage({
-				command: 'uninstallComplete',
-				success: true
-			});
-
-			// Wait a moment for UI to update
-			await new Promise(resolve => setTimeout(resolve, 500));
-
-			// Perform the uninstallation (which will trigger restart)
+			// Perform the uninstallation FIRST
 			const success = await this._storageProvider.uninstallExtension(extensionId);
 			
+			// Only send success feedback AFTER the operation completes
+			panel.webview.postMessage({
+				command: 'uninstallComplete',
+				success: success
+			});
+
 			if (!success) {
-				// If uninstallation failed, revert the UI
-				panel.webview.postMessage({
-					command: 'uninstallComplete',
-					success: false,
-					error: 'Uninstallation failed'
-				});
+				// Uninstallation failed - the UI will revert the button
+				console.error('Uninstallation failed');
 			}
 
 			// Note: StorageProvider.uninstallExtension handles the restart, so the window
-			// will reload/restart before we can update the panel content
+			// will reload/restart after this point
 		} catch (error) {
 			console.error('Error uninstalling extension from details view:', error);
 			panel.webview.postMessage({
@@ -660,7 +646,7 @@ export class ExtensionDetailsProvider {
 							
 							// Show message about restart
 							const restartMsg = document.createElement('div');
-							restartMsg.style.cssText = 'margin-top: 8px; padding: 8px; background-color: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 12px;';
+							restartMsg.style.cssText = 'margin-left: 12px; padding: 6px 8px; background-color: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 12px; display: flex; align-items: center; gap: 4px; white-space: nowrap;';
 							restartMsg.innerHTML = '<span class="codicon codicon-info"></span> Extension will be activated after restart.';
 							installBtn.parentNode.appendChild(restartMsg);
 						} else {
@@ -683,7 +669,7 @@ export class ExtensionDetailsProvider {
 							
 							// Show message about restart
 							const restartMsg = document.createElement('div');
-							restartMsg.style.cssText = 'margin-top: 8px; padding: 8px; background-color: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 12px;';
+							restartMsg.style.cssText = 'margin-left: 12px; padding: 6px 8px; background-color: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 12px; display: flex; align-items: center; gap: 4px; white-space: nowrap;';
 							restartMsg.innerHTML = '<span class="codicon codicon-info"></span> Extension will be updated after restart.';
 							updateBtn.parentNode.appendChild(restartMsg);
 						} else {
@@ -709,7 +695,7 @@ export class ExtensionDetailsProvider {
 							
 							// Show message about restart
 							const restartMsg = document.createElement('div');
-							restartMsg.style.cssText = 'margin-top: 8px; padding: 8px; background-color: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 12px;';
+							restartMsg.style.cssText = 'margin-left: 12px; padding: 6px 8px; background-color: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 12px; display: flex; align-items: center; gap: 4px; white-space: nowrap;';
 							restartMsg.innerHTML = '<span class="codicon codicon-info"></span> Extension will be deactivated after restart.';
 							uninstallBtn.parentNode.appendChild(restartMsg);
 						} else {

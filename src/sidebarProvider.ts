@@ -485,6 +485,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'reset.css'));
 		const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vscode.css'));
 		const styleMainUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.css'));
+		const codiconsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css'));
 
 		const nonce = getNonce();
 		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
@@ -499,6 +500,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <link href="${styleResetUri}" rel="stylesheet">
                 <link href="${styleVSCodeUri}" rel="stylesheet">
+				<link href="${codiconsUri}" rel="stylesheet">
                 <link href="${styleMainUri}" rel="stylesheet">
                 <title>Private Extensions</title>
             </head>
