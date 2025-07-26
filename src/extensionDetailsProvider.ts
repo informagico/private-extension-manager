@@ -66,8 +66,8 @@ export class ExtensionDetailsProvider {
 				lastModified: parseResult.lastModified,
 				readme: readme || undefined,
 				changelog: changelog || undefined,
-				repository: typeof parseResult.packageJson.repository === 'string' 
-					? parseResult.packageJson.repository 
+				repository: typeof parseResult.packageJson.repository === 'string'
+					? parseResult.packageJson.repository
 					: parseResult.packageJson.repository?.url,
 				bugs: typeof parseResult.packageJson.bugs === 'string'
 					? parseResult.packageJson.bugs
@@ -83,7 +83,7 @@ export class ExtensionDetailsProvider {
 			} else {
 				this._panel = vscode.window.createWebviewPanel(
 					'extensionDetails',
-					`Extension Details: ${this._extensionDetails.title}`,
+					`${this._extensionDetails.title}`,
 					vscode.ViewColumn.One,
 					{
 						enableScripts: true,
@@ -156,17 +156,17 @@ export class ExtensionDetailsProvider {
 
 		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'reset.css'));
 		const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vscode.css'));
-		const styleMainUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.css'));
+		const styleDetailsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'extension-details.css'));
 
 		const nonce = this._getNonce();
 
 		// Convert markdown to HTML using marked
-		let readmeHtml = details.readme ? 
-			marked.parse(details.readme) : 
+		let readmeHtml = details.readme ?
+			marked.parse(details.readme) :
 			'<p>No README.md found in this extension.</p>';
-		
-		let changelogHtml = details.changelog ? 
-			marked.parse(details.changelog) : 
+
+		let changelogHtml = details.changelog ?
+			marked.parse(details.changelog) :
 			'<p>No CHANGELOG.md found in this extension.</p>';
 
 		return `<!DOCTYPE html>
@@ -177,317 +177,86 @@ export class ExtensionDetailsProvider {
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<link href="${styleResetUri}" rel="stylesheet">
 	<link href="${styleVSCodeUri}" rel="stylesheet">
-	<link href="${styleMainUri}" rel="stylesheet">
+	<link href="${styleDetailsUri}" rel="stylesheet">
 	<title>Extension Details</title>
-	<style>
-		.extension-details {
-			padding: 20px;
-			max-width: 800px;
-			margin: 0 auto;
-		}
-		
-		.extension-header {
-			display: flex;
-			align-items: center;
-			gap: 16px;
-			margin-bottom: 24px;
-			padding-bottom: 16px;
-			border-bottom: 1px solid var(--vscode-panel-border);
-		}
-		
-		.extension-icon {
-			width: 64px;
-			height: 64px;
-			border-radius: 4px;
-			object-fit: cover;
-		}
-		
-		.icon-placeholder {
-			width: 64px;
-			height: 64px;
-			background: linear-gradient(135deg, var(--vscode-button-background), var(--vscode-button-hoverBackground));
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			color: var(--vscode-button-foreground);
-			font-size: 32px;
-			border-radius: 4px;
-		}
-		
-		.extension-info h1 {
-			margin: 0 0 4px 0;
-			font-size: 24px;
-			color: var(--vscode-foreground);
-		}
-		
-		.extension-meta {
-			color: var(--vscode-descriptionForeground);
-			font-size: 14px;
-			margin: 4px 0;
-		}
-		
-		.extension-description {
-			margin: 8px 0;
-			color: var(--vscode-foreground);
-			font-size: 14px;
-		}
-		
-		.extension-links {
-			display: flex;
-			gap: 12px;
-			margin-top: 12px;
-		}
-		
-		.extension-link {
-			color: var(--vscode-textLink-foreground);
-			text-decoration: none;
-			font-size: 13px;
-			padding: 4px 8px;
-			border-radius: 2px;
-			border: 1px solid var(--vscode-textLink-foreground);
-			transition: background-color 0.2s;
-		}
-		
-		.extension-link:hover {
-			background-color: var(--vscode-textLink-activeForeground);
-			color: var(--vscode-editor-background);
-		}
-		
-		.tabs-container {
-			margin-top: 24px;
-		}
-		
-		.tabs-header {
-			display: flex;
-			border-bottom: 1px solid var(--vscode-panel-border);
-		}
-		
-		.tab-button {
-			background: none;
-			border: none;
-			padding: 12px 16px;
-			cursor: pointer;
-			color: var(--vscode-descriptionForeground);
-			font-size: 14px;
-			border-bottom: 2px solid transparent;
-			transition: all 0.2s;
-		}
-		
-		.tab-button.active {
-			color: var(--vscode-foreground);
-			border-bottom-color: var(--vscode-focusBorder);
-		}
-		
-		.tab-button:hover {
-			background-color: var(--vscode-list-hoverBackground);
-		}
-		
-		.tab-content {
-			display: none;
-			padding: 20px 0;
-		}
-		
-		.tab-content.active {
-			display: block;
-		}
-		
-		.markdown-content {
-			color: var(--vscode-foreground);
-			line-height: 1.6;
-		}
-		
-		.markdown-content h1,
-		.markdown-content h2,
-		.markdown-content h3,
-		.markdown-content h4,
-		.markdown-content h5,
-		.markdown-content h6 {
-			color: var(--vscode-foreground);
-			margin-top: 24px;
-			margin-bottom: 12px;
-		}
-		
-		.markdown-content h1 { font-size: 1.8em; }
-		.markdown-content h2 { font-size: 1.5em; }
-		.markdown-content h3 { font-size: 1.3em; }
-		.markdown-content h4 { font-size: 1.1em; }
-		
-		.markdown-content p {
-			margin: 12px 0;
-		}
-		
-		.markdown-content ul,
-		.markdown-content ol {
-			margin: 12px 0;
-			padding-left: 24px;
-		}
-		
-		.markdown-content li {
-			margin: 4px 0;
-		}
-		
-		.markdown-content code {
-			background-color: var(--vscode-textBlockQuote-background);
-			color: var(--vscode-textPreformat-foreground);
-			padding: 2px 4px;
-			border-radius: 2px;
-			font-family: var(--vscode-editor-font-family, monospace);
-		}
-		
-		.markdown-content pre {
-			background-color: var(--vscode-textBlockQuote-background);
-			padding: 12px;
-			border-radius: 4px;
-			overflow-x: auto;
-			margin: 12px 0;
-		}
-		
-		.markdown-content pre code {
-			background: none;
-			padding: 0;
-		}
-		
-		.markdown-content blockquote {
-			border-left: 4px solid var(--vscode-textBlockQuote-border);
-			background-color: var(--vscode-textBlockQuote-background);
-			padding: 8px 12px;
-			margin: 12px 0;
-		}
-		
-		.markdown-content a {
-			color: var(--vscode-textLink-foreground);
-			text-decoration: none;
-		}
-		
-		.markdown-content a:hover {
-			text-decoration: underline;
-		}
-
-		.markdown-content table {
-			border-collapse: collapse;
-			width: 100%;
-			margin: 12px 0;
-		}
-
-		.markdown-content th,
-		.markdown-content td {
-			border: 1px solid var(--vscode-panel-border);
-			padding: 8px 12px;
-			text-align: left;
-		}
-
-		.markdown-content th {
-			background-color: var(--vscode-textBlockQuote-background);
-			font-weight: bold;
-		}
-
-		.markdown-content hr {
-			border: none;
-			height: 1px;
-			background-color: var(--vscode-panel-border);
-			margin: 20px 0;
-		}
-		
-		.categories-keywords {
-			display: flex;
-			gap: 16px;
-			margin-top: 12px;
-			flex-wrap: wrap;
-		}
-		
-		.categories,
-		.keywords {
-			display: flex;
-			gap: 4px;
-			flex-wrap: wrap;
-		}
-		
-		.category-tag,
-		.keyword-tag {
-			background-color: var(--vscode-badge-background);
-			color: var(--vscode-badge-foreground);
-			padding: 2px 6px;
-			border-radius: 2px;
-			font-size: 11px;
-		}
-		
-		.file-info {
-			margin-top: 12px;
-			font-size: 12px;
-			color: var(--vscode-descriptionForeground);
-		}
-
-		.image-placeholder {
-			background-color: var(--vscode-textBlockQuote-background);
-			color: var(--vscode-descriptionForeground);
-			padding: 8px 12px;
-			border-radius: 4px;
-			margin: 8px 0;
-			font-style: italic;
-		}
-	</style>
 </head>
-<body>
-	<div class="extension-details">
-		<div class="extension-header">
+<body class="extension-details-container">
+	<!-- Header Section -->
+	<div class="extension-header">
+		<div class="extension-header-content">
 			<div class="extension-icon-container">
 				${details.icon ? `
-					<img src="${details.icon}" class="extension-icon" alt="${details.title} icon" />
+					<img src="${details.icon}" class="extension-icon-large" alt="${details.title} icon" />
 				` : `
-					<div class="icon-placeholder">
+					<div class="icon-placeholder-large">
 						<span class="codicon codicon-extensions"></span>
 					</div>
 				`}
 			</div>
-			<div class="extension-info">
-				<h1>${details.title}</h1>
-				<div class="extension-meta">
-					<strong>${details.publisher}</strong> • Version ${details.version}
+			<div class="extension-main-info">
+				<h1 class="extension-title">${details.title}</h1>
+				<div class="extension-publisher">
+					<span class="publisher-name" onclick="openUrl('#')">${details.publisher}</span>
 				</div>
 				<div class="extension-description">${details.description}</div>
-				
-				${details.categories && details.categories.length > 0 ? `
-					<div class="categories-keywords">
-						<div>
-							<strong>Categories:</strong>
-							<div class="categories">
-								${details.categories.map(cat => `<span class="category-tag">${cat}</span>`).join('')}
-							</div>
-						</div>
-					</div>
-				` : ''}
-				
-				${details.keywords && details.keywords.length > 0 ? `
-					<div class="categories-keywords">
-						<div>
-							<strong>Keywords:</strong>
-							<div class="keywords">
-								${details.keywords.map(keyword => `<span class="keyword-tag">${keyword}</span>`).join('')}
-							</div>
-						</div>
-					</div>
-				` : ''}
-				
-				<div class="extension-links">
-					${details.homepage ? `<a href="#" class="extension-link" onclick="openUrl('${details.homepage}')">Homepage</a>` : ''}
-					${details.repository ? `<a href="#" class="extension-link" onclick="openUrl('${details.repository}')">Repository</a>` : ''}
-					${details.bugs ? `<a href="#" class="extension-link" onclick="openUrl('${details.bugs}')">Issues</a>` : ''}
-				</div>
-				
-				<div class="file-info">
-					<div><strong>File:</strong> ${details.filePath}</div>
-					<div><strong>Size:</strong> ${VsixUtils.formatFileSize(details.fileSize)}</div>
-					<div><strong>Modified:</strong> ${details.lastModified.toLocaleString()}</div>
-					${details.license ? `<div><strong>License:</strong> ${details.license}</div>` : ''}
-					${details.engines ? `<div><strong>VS Code:</strong> ${details.engines.vscode || 'N/A'}</div>` : ''}
+				<div class="extension-actions">
+					<button class="install-button">
+						<span class="codicon codicon-cloud-download"></span>
+						Install
+					</button>
+					<span class="settings-gear codicon codicon-gear"></span>
 				</div>
 			</div>
 		</div>
-		
+	</div>
+
+	<!-- Sidebar -->
+	<div class="extension-sidebar">
+		<div class="sidebar-section">
+			<div class="sidebar-content">
+				<div class="metadata-item">
+					<span class="metadata-label">Identifier</span><br>
+					${details.id}
+				</div>
+				<div class="metadata-item">
+					<span class="metadata-label">Version</span><br>
+					${details.version}
+				</div>
+				<div class="metadata-item">
+					<span class="metadata-label">Published</span><br>
+					${details.lastModified.toLocaleDateString()}
+				</div>
+			</div>
+		</div>
+
+		${details.categories && details.categories.length > 0 ? `
+		<div class="sidebar-section">
+			<div class="sidebar-title">Categories</div>
+			<div class="sidebar-content">
+				<div class="categories-list">
+					${details.categories.map(cat => `<div class="category-tag">${cat}</div>`).join('')}
+				</div>
+			</div>
+		</div>
+		` : ''}
+
+		<div class="sidebar-section">
+			<div class="sidebar-title">Resources</div>
+			<div class="sidebar-content">
+				<div class="resources-list">
+					${details.homepage ? `<a href="${details.homepage}" class="resource-link" onclick="openUrl('${details.homepage}')">Homepage</a>` : ''}
+					${details.repository ? `<a href="${details.repository}" class="resource-link" onclick="openUrl('${details.repository}')">Repository</a>` : ''}
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Main Content -->
+	<div class="main-content">
 		<div class="tabs-container">
 			<div class="tabs-header">
-				<button class="tab-button active" data-tab="details">DETAILS</button>
-				<button class="tab-button" data-tab="changelog">CHANGELOG</button>
+				<button class="tab-button active" data-tab="details">Details</button>
+				<button class="tab-button" data-tab="features">Features</button>
 			</div>
 			
 			<div class="tab-content active" id="details-tab">
@@ -496,9 +265,37 @@ export class ExtensionDetailsProvider {
 				</div>
 			</div>
 			
-			<div class="tab-content" id="changelog-tab">
+			<div class="tab-content" id="features-tab">
 				<div class="markdown-content">
 					${changelogHtml}
+					
+					${details.keywords && details.keywords.length > 0 ? `
+					<div class="features-section">
+						<h2>Keywords</h2>
+						<p>${details.keywords.join(', ')}</p>
+					</div>
+					` : ''}
+
+					<div class="troubleshooting-section">
+						<h2>Troubleshooting</h2>
+						<div class="troubleshooting-item">
+							<div class="troubleshooting-title">Windows:</div>
+							<div class="troubleshooting-content">
+								Do not run your VSCode or Discord as admin, there is no reason to and it just further complicates everything down the line.
+							</div>
+						</div>
+						<div class="troubleshooting-item">
+							<div class="troubleshooting-title">Linux:</div>
+							<div class="troubleshooting-content">
+								Discord versions installed using <code>flatpak</code> or <code>snap</code> need modifications in order to support IPC. In order to avoid this (and as Discord itself suggests) you should download it from discord.com
+							</div>
+						</div>
+						
+						<h3>File Information</h3>
+						<p><strong>File Path:</strong> ${details.filePath}</p>
+						<p><strong>File Size:</strong> ${VsixUtils.formatFileSize(details.fileSize)}</p>
+						<p><strong>VS Code Engine:</strong> ${details.engines?.vscode || 'Not specified'}</p>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -537,6 +334,18 @@ export class ExtensionDetailsProvider {
 		
 		// Make openUrl available globally
 		window.openUrl = openUrl;
+		
+		// Install button click handler
+		document.querySelector('.install-button')?.addEventListener('click', () => {
+			// You can add install functionality here
+			console.log('Install button clicked');
+		});
+		
+		// Settings gear click handler
+		document.querySelector('.settings-gear')?.addEventListener('click', () => {
+			// You can add settings functionality here
+			console.log('Settings gear clicked');
+		});
 		
 		// Debug: Log when script loads
 		console.log('Extension details script loaded');
