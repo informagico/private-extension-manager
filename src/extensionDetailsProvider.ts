@@ -166,6 +166,9 @@ export class ExtensionDetailsProvider {
 						case 'uninstallExtension':
 							this._handleUninstallExtension(extensionInfo.id, panel);
 							break;
+						case 'openExtensionSettings':
+							this._handleOpenExtensionSettings(extensionInfo.id);
+							break;
 						case 'showError':
 							if (message.message) {
 								vscode.window.showErrorMessage(message.message);
@@ -180,6 +183,23 @@ export class ExtensionDetailsProvider {
 		} catch (error) {
 			console.error('Error showing extension details:', error);
 			vscode.window.showErrorMessage(`Error loading extension details: ${error}`);
+		}
+	}
+
+	private async _handleOpenExtensionSettings(extensionId: string): Promise<void> {
+		try {
+			// Check if extension is actually installed
+			const extension = vscode.extensions.getExtension(extensionId);
+			if (!extension) {
+				vscode.window.showWarningMessage('Extension must be installed to access its settings.');
+				return;
+			}
+
+			// Open extension settings using VS Code command
+			await vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${extensionId}`);
+		} catch (error) {
+			console.error('Error opening extension settings:', error);
+			vscode.window.showErrorMessage(`Failed to open extension settings: ${error}`);
 		}
 	}
 
@@ -337,6 +357,9 @@ export class ExtensionDetailsProvider {
 		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'reset.css'));
 		const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vscode.css'));
 		const styleDetailsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'extension-details.css'));
+		
+		// Add codicons support
+		const codiconsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css'));
 
 		const nonce = this._getNonce();
 
@@ -374,6 +397,9 @@ export class ExtensionDetailsProvider {
 							<span class="codicon codicon-trash"></span>
 							Uninstall
 						</button>
+						<button class="settings-gear" id="settings-gear" title="Open Extension Settings">
+							<span class="codicon codicon-gear"></span>
+						</button>
 					`
 				};
 			} else {
@@ -383,6 +409,9 @@ export class ExtensionDetailsProvider {
 						<button class="uninstall-button" id="uninstall-btn">
 							<span class="codicon codicon-trash"></span>
 							Uninstall
+						</button>
+						<button class="settings-gear" id="settings-gear" title="Open Extension Settings">
+							<span class="codicon codicon-gear"></span>
 						</button>
 					`
 				};
@@ -399,6 +428,7 @@ export class ExtensionDetailsProvider {
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<link href="${styleResetUri}" rel="stylesheet">
 	<link href="${styleVSCodeUri}" rel="stylesheet">
+	<link href="${codiconsUri}" rel="stylesheet">
 	<link href="${styleDetailsUri}" rel="stylesheet">
 	<title>Extension Details</title>
 </head>
@@ -422,7 +452,6 @@ export class ExtensionDetailsProvider {
 				<div class="extension-description">${details.description}</div>
 				<div class="extension-actions">
 					${statusDisplay.buttons}
-					<span class="settings-gear codicon codicon-gear" id="settings-gear"></span>
 				</div>
 			</div>
 		</div>
@@ -586,6 +615,12 @@ export class ExtensionDetailsProvider {
 				command: 'uninstallExtension'
 			});
 		}
+
+		function openExtensionSettings() {
+			vscode.postMessage({
+				command: 'openExtensionSettings'
+			});
+		}
 		
 		document.addEventListener('DOMContentLoaded', () => {
 			const installBtn = document.getElementById('install-btn');
@@ -605,12 +640,7 @@ export class ExtensionDetailsProvider {
 			
 			const settingsGear = document.getElementById('settings-gear');
 			if (settingsGear) {
-				settingsGear.addEventListener('click', () => {
-					vscode.postMessage({
-						command: 'openUrl',
-						url: 'command:workbench.action.openSettings?%5B%22privateExtensionsSidebar%22%5D'
-					});
-				});
+				settingsGear.addEventListener('click', openExtensionSettings);
 			}
 		});
 		
