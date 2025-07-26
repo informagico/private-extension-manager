@@ -496,3 +496,189 @@
 	border-radius: 4px;
 	margin: 20px;
 }
+
+/* Status badge styling */
+.status-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 2px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.status-badge.installed {
+	background-color: var(--vscode-charts-green);
+	color: var(--vscode-editor-background);
+}
+
+.status-badge.not-installed {
+	background-color: var(--vscode-descriptionForeground);
+	color: var(--vscode-editor-background);
+}
+
+/* Uninstall button styling */
+.uninstall-button {
+	background-color: var(--vscode-errorForeground);
+	color: var(--vscode-editor-background);
+	border: none;
+	padding: 8px 16px;
+	border-radius: 2px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	transition: background-color 0.2s;
+}
+
+.uninstall-button:hover {
+	background-color: var(--vscode-errorForeground);
+	opacity: 0.9;
+}
+
+.uninstall-button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* Resource item styling (for license info, etc.) */
+.resource-item {
+	color: var(--vscode-descriptionForeground);
+	font-size: 13px;
+	padding: 4px 0;
+	border-bottom: 1px solid var(--vscode-panel-border);
+	margin-bottom: 4px;
+}
+
+.resource-item:last-child {
+	border-bottom: none;
+	margin-bottom: 0;
+}
+
+/* File path styling */
+.file-path {
+	font-family: var(--vscode-editor-font-family, 'Consolas', 'Courier New', monospace);
+	font-size: 11px;
+	color: var(--vscode-textPreformat-foreground);
+	background-color: var(--vscode-textBlockQuote-background);
+	padding: 2px 4px;
+	border-radius: 2px;
+	word-break: break-all;
+	cursor: help;
+}
+
+/* Improved spacing for metadata items */
+.metadata-item {
+	margin-bottom: 12px;
+}
+
+.metadata-item:last-child {
+	margin-bottom: 0;
+}
+
+/* Enhanced troubleshooting section */
+.troubleshooting-item code {
+	display: inline-block;
+	margin: 2px 0;
+}
+
+/* Button loading state improvements */
+.install-button:disabled,
+.uninstall-button:disabled {
+	pointer-events: none;
+}
+
+.install-button .codicon.spin,
+.uninstall-button .codicon.spin {
+	animation: spin 1s linear infinite;
+}
+
+/* Success state for buttons */
+.install-button.success {
+	background-color: var(--vscode-charts-green) !important;
+}
+
+.uninstall-button.success {
+	background-color: var(--vscode-charts-green) !important;
+}
+
+/* Enhanced responsive design for sidebar */
+@media (max-width: 1200px) {
+	.extension-sidebar {
+		position: static;
+		width: 100%;
+		margin: 0;
+		margin-top: 32px;
+		border-radius: 0;
+		border-left: none;
+		border-right: none;
+	}
+	
+	.main-content {
+		padding-right: 32px;
+		max-width: none;
+	}
+}
+
+@media (max-width: 768px) {
+	.extension-sidebar {
+		padding: 16px;
+		margin-top: 20px;
+	}
+	
+	.sidebar-section {
+		margin-bottom: 16px;
+	}
+	
+	.extension-actions {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 8px;
+	}
+	
+	.install-button,
+	.uninstall-button {
+		width: 100%;
+		justify-content: center;
+	}
+}
+
+/* Fix for very long extension IDs */
+.metadata-item {
+	word-break: break-word;
+	overflow-wrap: break-word;
+}
+
+/* Improve categories list spacing */
+.categories-list {
+	gap: 6px;
+}
+
+.category-tag {
+	margin-bottom: 4px;
+}
+
+/* Enhanced link styling */
+.resource-link {
+	display: block;
+	padding: 6px 0;
+	border-bottom: 1px solid transparent;
+	transition: border-color 0.2s;
+}
+
+.resource-link:hover {
+	border-bottom-color: var(--vscode-textLink-foreground);
+}
+
+/* Loading animation */
+@keyframes spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}

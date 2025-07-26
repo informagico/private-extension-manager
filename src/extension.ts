@@ -11,7 +11,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerWebviewViewProvider(PrivateExtensionsSidebarProvider.viewType, sidebarProvider)
 	);
 
-	// **NEW: Load extensions immediately at startup**
+	// Load extensions immediately at startup
 	loadExtensionsAtStartup(sidebarProvider, context);
 
 	// Register commands
