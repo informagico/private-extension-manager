@@ -280,117 +280,119 @@ export class ExtensionDetailsProvider {
 		</div>
 	</div>
 
-	<div class="extension-sidebar">
-		<div class="sidebar-section">
-			<div class="sidebar-content">
-				<div class="metadata-item">
-					<span class="metadata-label">Identifier</span><br>
-					${details.id}
+	<div class="content-area">
+		<div class="main-content">
+			<div class="tabs-container">
+				<div class="tabs-header">
+					<button class="tab-button active" data-tab="details">Details</button>
+					<button class="tab-button" data-tab="features">Features</button>
 				</div>
-				<div class="metadata-item">
-					<span class="metadata-label">Version</span><br>
-					${details.version}
-				</div>
-				<div class="metadata-item">
-					<span class="metadata-label">Published</span><br>
-					${details.lastModified.toLocaleDateString()}
-				</div>
-				<div class="metadata-item">
-					<span class="metadata-label">Status</span><br>
-					${statusDisplay.badge}
-				</div>
-			</div>
-		</div>
-
-		${details.categories && details.categories.length > 0 ? `
-		<div class="sidebar-section">
-			<div class="sidebar-title">Categories</div>
-			<div class="sidebar-content">
-				<div class="categories-list">
-					${details.categories.map(cat => `<div class="category-tag">${cat}</div>`).join('')}
-				</div>
-			</div>
-		</div>
-		` : ''}
-
-		<div class="sidebar-section">
-			<div class="sidebar-title">Resources</div>
-			<div class="sidebar-content">
-				<div class="resources-list">
-					${details.homepage ? `<a href="${details.homepage}" class="resource-link">Homepage</a>` : ''}
-					${details.repository ? `<a href="${details.repository}" class="resource-link">Repository</a>` : ''}
-					${details.bugs ? `<a href="${details.bugs}" class="resource-link">Report Issues</a>` : ''}
-					${details.license ? `<div class="resource-item">License: ${details.license}</div>` : ''}
-				</div>
-			</div>
-		</div>
-
-		<div class="sidebar-section">
-			<div class="sidebar-title">File Information</div>
-			<div class="sidebar-content">
-				<div class="metadata-item">
-					<span class="metadata-label">File Size</span><br>
-					${VsixUtils.formatFileSize(details.fileSize)}
-				</div>
-				<div class="metadata-item">
-					<span class="metadata-label">File Path</span><br>
-					<span class="file-path" title="${details.filePath}">${this._shortenPath(details.filePath)}</span>
-				</div>
-				${details.engines?.vscode ? `
-				<div class="metadata-item">
-					<span class="metadata-label">VS Code Engine</span><br>
-					${details.engines.vscode}
-				</div>
-				` : ''}
-			</div>
-		</div>
-	</div>
-
-	<div class="main-content">
-		<div class="tabs-container">
-			<div class="tabs-header">
-				<button class="tab-button active" data-tab="details">Details</button>
-				<button class="tab-button" data-tab="features">Features</button>
-			</div>
-			
-			<div class="tab-content active" id="details-tab">
-				<div class="markdown-content">
-					${readmeHtml}
-				</div>
-			</div>
-			
-			<div class="tab-content" id="features-tab">
-				<div class="markdown-content">
-					${changelogHtml}
-					
-					${details.keywords && details.keywords.length > 0 ? `
-					<div class="features-section">
-						<h2>Keywords</h2>
-						<p>${details.keywords.join(', ')}</p>
+				
+				<div class="tab-content active" id="details-tab">
+					<div class="markdown-content">
+						${readmeHtml}
 					</div>
-					` : ''}
-
-					<div class="troubleshooting-section">
-						<h2>Technical Information</h2>
+				</div>
+				
+				<div class="tab-content" id="features-tab">
+					<div class="markdown-content">
+						${changelogHtml}
 						
-						${details.engines && Object.keys(details.engines).length > 0 ? `
-						<div class="troubleshooting-item">
-							<div class="troubleshooting-title">Engine Requirements:</div>
-							<div class="troubleshooting-content">
-								${Object.entries(details.engines).map(([engine, version]) =>
-			`<code>${engine}: ${version}</code>`
-		).join('<br>')}
-							</div>
+						${details.keywords && details.keywords.length > 0 ? `
+						<div class="features-section">
+							<h2>Keywords</h2>
+							<p>${details.keywords.join(', ')}</p>
 						</div>
 						` : ''}
-						
-						<div class="troubleshooting-item">
-							<div class="troubleshooting-title">Installation:</div>
-							<div class="troubleshooting-content">
-								This extension is installed from a local VSIX file. Updates must be done manually by replacing the VSIX file and reinstalling.
+
+						<div class="troubleshooting-section">
+							<h2>Technical Information</h2>
+							
+							${details.engines && Object.keys(details.engines).length > 0 ? `
+							<div class="troubleshooting-item">
+								<div class="troubleshooting-title">Engine Requirements:</div>
+								<div class="troubleshooting-content">
+									${Object.entries(details.engines).map(([engine, version]) =>
+			`<code>${engine}: ${version}</code>`
+		).join('<br>')}
+								</div>
+							</div>
+							` : ''}
+							
+							<div class="troubleshooting-item">
+								<div class="troubleshooting-title">Installation:</div>
+								<div class="troubleshooting-content">
+									This extension is installed from a local VSIX file. Updates must be done manually by replacing the VSIX file and reinstalling.
+								</div>
 							</div>
 						</div>
 					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="extension-sidebar">
+			<div class="sidebar-section">
+				<div class="sidebar-content">
+					<div class="metadata-item">
+						<span class="metadata-label">Identifier</span><br>
+						${details.id}
+					</div>
+					<div class="metadata-item">
+						<span class="metadata-label">Version</span><br>
+						${details.version}
+					</div>
+					<div class="metadata-item">
+						<span class="metadata-label">Published</span><br>
+						${details.lastModified.toLocaleDateString()}
+					</div>
+					<div class="metadata-item">
+						<span class="metadata-label">Status</span><br>
+						${statusDisplay.badge}
+					</div>
+				</div>
+			</div>
+
+			${details.categories && details.categories.length > 0 ? `
+			<div class="sidebar-section">
+				<div class="sidebar-title">Categories</div>
+				<div class="sidebar-content">
+					<div class="categories-list">
+						${details.categories.map(cat => `<div class="category-tag">${cat}</div>`).join('')}
+					</div>
+				</div>
+			</div>
+			` : ''}
+
+			<div class="sidebar-section">
+				<div class="sidebar-title">Resources</div>
+				<div class="sidebar-content">
+					<div class="resources-list">
+						${details.homepage ? `<a href="${details.homepage}" class="resource-link">Homepage</a>` : ''}
+						${details.repository ? `<a href="${details.repository}" class="resource-link">Repository</a>` : ''}
+						${details.bugs ? `<a href="${details.bugs}" class="resource-link">Report Issues</a>` : ''}
+						${details.license ? `<div class="resource-item">License: ${details.license}</div>` : ''}
+					</div>
+				</div>
+			</div>
+
+			<div class="sidebar-section">
+				<div class="sidebar-title">File Information</div>
+				<div class="sidebar-content">
+					<div class="metadata-item">
+						<span class="metadata-label">File Size</span><br>
+						${VsixUtils.formatFileSize(details.fileSize)}
+					</div>
+					<div class="metadata-item">
+						<span class="metadata-label">File Path</span><br>
+						<span class="file-path" title="${details.filePath}">${this._shortenPath(details.filePath)}</span>
+					</div>
+					${details.engines?.vscode ? `
+					<div class="metadata-item">
+						<span class="metadata-label">VS Code Engine</span><br>
+						${details.engines.vscode}
+					</div>
+					` : ''}
 				</div>
 			</div>
 		</div>
