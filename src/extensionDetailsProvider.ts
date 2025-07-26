@@ -45,9 +45,20 @@ export class ExtensionDetailsProvider {
 				return;
 			}
 
+			// Check if panel already exists for this extension
+			const existingPanel = this._activePanels.get(extensionInfo.id);
+			if (existingPanel) {
+				// Focus the existing panel instead of creating a new one
+				existingPanel.reveal(vscode.ViewColumn.One);
+				
+				// Update the content in case the extension data has changed
+				const extensionDetails = this._buildExtensionDetails(extensionInfo);
+				existingPanel.webview.html = this._getWebviewContent(extensionDetails, existingPanel.webview);
+				return;
+			}
+
 			const extensionDetails = this._buildExtensionDetails(extensionInfo);
 
-			const panelKey = `${extensionInfo.id}_${Date.now()}`;
 			const panel = vscode.window.createWebviewPanel(
 				'extensionDetails',
 				`${extensionDetails.title}`,
@@ -59,10 +70,11 @@ export class ExtensionDetailsProvider {
 				}
 			);
 
-			this._activePanels.set(panelKey, panel);
+			// Use extension ID as the key (without timestamp)
+			this._activePanels.set(extensionInfo.id, panel);
 
 			panel.onDidDispose(() => {
-				this._activePanels.delete(panelKey);
+				this._activePanels.delete(extensionInfo.id);
 			});
 
 			panel.webview.onDidReceiveMessage(
@@ -145,8 +157,12 @@ export class ExtensionDetailsProvider {
 		try {
 			const success = await this._storageProvider.installExtension(extensionInfo);
 			if (success) {
-				const extensionDetails = this._buildExtensionDetails(extensionInfo);
-				panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
+				// Get updated extension info and refresh the panel
+				const updatedExtensionInfo = this._storageProvider.getExtensionById(extensionInfo.id);
+				if (updatedExtensionInfo) {
+					const extensionDetails = this._buildExtensionDetails(updatedExtensionInfo);
+					panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
+				}
 
 				panel.webview.postMessage({
 					command: 'installComplete',
@@ -186,6 +202,36 @@ export class ExtensionDetailsProvider {
 				error: error instanceof Error ? error.message : String(error)
 			});
 		}
+	}
+
+	/**
+	 * Update all open panels when extension data changes
+	 */
+	public updateOpenPanels(): void {
+		this._activePanels.forEach((panel, extensionId) => {
+			const extensionInfo = this._storageProvider.getExtensionById(extensionId);
+			if (extensionInfo) {
+				const extensionDetails = this._buildExtensionDetails(extensionInfo);
+				panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
+			}
+		});
+	}
+
+	/**
+	 * Close panel for a specific extension
+	 */
+	public closePanelForExtension(extensionId: string): void {
+		const panel = this._activePanels.get(extensionId);
+		if (panel) {
+			panel.dispose();
+		}
+	}
+
+	/**
+	 * Get list of currently open extension IDs
+	 */
+	public getOpenExtensions(): string[] {
+		return Array.from(this._activePanels.keys());
 	}
 
 	private _getWebviewContent(details: ExtensionDetails, webview: vscode.Webview): string {
