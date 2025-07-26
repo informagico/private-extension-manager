@@ -133,7 +133,7 @@ async function loadExtensionsAtStartup(sidebarProvider: PrivateExtensionsSidebar
 		// Show progress notification for startup scan
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: "Loading private extensions...",
+			title: "Loading private extensions",
 			cancellable: false
 		}, async (progress) => {
 			progress.report({ increment: 0, message: "Scanning directories..." });
