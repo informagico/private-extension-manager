@@ -430,14 +430,33 @@
 	margin: 16px 0;
 }
 
+/* Features section styling */
 .features-section {
 	margin-top: 32px;
+}
+
+.features-section:first-child {
+	margin-top: 0;
 }
 
 .features-list {
 	list-style: none;
 	padding: 0;
 	margin: 16px 0;
+}
+
+.features-list .feature-item {
+	padding: 8px 0;
+	position: relative;
+	padding-left: 0;
+	color: var(--vscode-editor-foreground);
+	border-bottom: 1px solid var(--vscode-panel-border);
+	margin-bottom: 8px;
+}
+
+.features-list .feature-item:last-child {
+	border-bottom: none;
+	margin-bottom: 0;
 }
 
 .features-list li {
@@ -669,135 +688,6 @@
 		width: 100%;
 		justify-content: center;
 	}
-}
-
-
-.loading-state {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 40px;
-	color: var(--vscode-descriptionForeground);
-}
-
-.error-state {
-	padding: 40px;
-	text-align: center;
-	color: var(--vscode-errorForeground);
-	background-color: var(--vscode-inputValidation-errorBackground);
-	border: 1px solid var(--vscode-errorForeground);
-	border-radius: 4px;
-	margin: 20px;
-}
-
-.status-badge {
-	display: inline-block;
-	padding: 2px 8px;
-	border-radius: 2px;
-	font-size: 11px;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
-}
-
-.status-badge.installed {
-	background-color: var(--vscode-charts-green);
-	color: var(--vscode-editor-background);
-}
-
-.status-badge.not-installed {
-	background-color: var(--vscode-descriptionForeground);
-	color: var(--vscode-editor-background);
-}
-
-.uninstall-button {
-	background-color: var(--vscode-errorForeground);
-	color: var(--vscode-editor-background);
-	border: none;
-	padding: 8px 16px;
-	border-radius: 2px;
-	font-size: 14px;
-	font-weight: 600;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	transition: background-color 0.2s;
-}
-
-.uninstall-button:hover {
-	background-color: var(--vscode-errorForeground);
-	opacity: 0.9;
-}
-
-.uninstall-button:disabled {
-	opacity: 0.6;
-	cursor: not-allowed;
-}
-
-.resource-item {
-	color: var(--vscode-descriptionForeground);
-	font-size: 13px;
-	padding: 4px 0;
-	border-bottom: 1px solid var(--vscode-panel-border);
-	margin-bottom: 4px;
-}
-
-.resource-item:last-child {
-	border-bottom: none;
-	margin-bottom: 0;
-}
-
-.file-path {
-	font-family: var(--vscode-editor-font-family, 'Consolas', 'Courier New', monospace);
-	font-size: 11px;
-	color: var(--vscode-textPreformat-foreground);
-	background-color: var(--vscode-textBlockQuote-background);
-	padding: 2px 4px;
-	border-radius: 2px;
-	word-break: break-all;
-	cursor: help;
-}
-
-.metadata-item {
-	margin-bottom: 12px;
-	word-break: break-word;
-	overflow-wrap: break-word;
-}
-
-.metadata-item:last-child {
-	margin-bottom: 0;
-}
-
-.categories-list {
-	gap: 6px;
-}
-
-.category-tag {
-	margin-bottom: 4px;
-}
-
-.troubleshooting-item code {
-	display: inline-block;
-	margin: 2px 0;
-}
-
-.install-button:disabled,
-.uninstall-button:disabled {
-	pointer-events: none;
-}
-
-.install-button .codicon.spin,
-.uninstall-button .codicon.spin {
-	animation: spin 1s linear infinite;
-}
-
-.install-button.success {
-	background-color: var(--vscode-charts-green) !important;
-}
-
-.uninstall-button.success {
-	background-color: var(--vscode-charts-green) !important;
 }
 
 @keyframes spin {

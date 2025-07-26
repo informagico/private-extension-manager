@@ -348,6 +348,9 @@ export class ExtensionDetailsProvider {
 			marked.parse(details.changelog) :
 			'<p>No CHANGELOG.md found in this extension.</p>';
 
+		// Generate features content from keywords and technical information
+		const featuresHtml = this._generateFeaturesContent(details);
+
 		const getStatusDisplay = () => {
 			if (!details.isInstalled) {
 				return {
@@ -431,6 +434,7 @@ export class ExtensionDetailsProvider {
 				<div class="tabs-header">
 					<button class="tab-button active" data-tab="details">Details</button>
 					<button class="tab-button" data-tab="features">Features</button>
+					<button class="tab-button" data-tab="changelog">Changelog</button>
 				</div>
 				
 				<div class="tab-content active" id="details-tab">
@@ -441,43 +445,13 @@ export class ExtensionDetailsProvider {
 				
 				<div class="tab-content" id="features-tab">
 					<div class="markdown-content">
+						${featuresHtml}
+					</div>
+				</div>
+				
+				<div class="tab-content" id="changelog-tab">
+					<div class="markdown-content">
 						${changelogHtml}
-						
-						${details.keywords && details.keywords.length > 0 ? `
-						<div class="features-section">
-							<h2>Keywords</h2>
-							<p>${details.keywords.join(', ')}</p>
-						</div>
-						` : ''}
-
-						<div class="troubleshooting-section">
-							<h2>Technical Information</h2>
-							
-							${details.engines && Object.keys(details.engines).length > 0 ? `
-							<div class="troubleshooting-item">
-								<div class="troubleshooting-title">Engine Requirements:</div>
-								<div class="troubleshooting-content">
-									${Object.entries(details.engines).map(([engine, version]) =>
-			`<code>${engine}: ${version}</code>`
-		).join('<br>')}
-								</div>
-							</div>
-							` : ''}
-							
-							<div class="troubleshooting-item">
-								<div class="troubleshooting-title">Installation:</div>
-								<div class="troubleshooting-content">
-									This extension is installed from a local VSIX file. Updates must be done manually by replacing the VSIX file and reinstalling.
-								</div>
-							</div>
-							
-							<div class="troubleshooting-item">
-								<div class="troubleshooting-title">Extension Restart:</div>
-								<div class="troubleshooting-content">
-									After installing, updating, or uninstalling, VS Code will prompt to restart extensions or reload the window for changes to take effect.
-								</div>
-							</div>
-						</div>
 					</div>
 				</div>
 			</div>
@@ -734,20 +708,93 @@ export class ExtensionDetailsProvider {
 				}
 			}
 		});
-		
-		// Handle resource links
-		document.querySelectorAll('.resource-link').forEach(link => {
-			link.addEventListener('click', function(e) {
-				e.preventDefault();
-				const href = this.getAttribute('href');
-				if (href) {
-					openUrl(href);
-				}
-			});
-		});
 	</script>
 </body>
 </html>`;
+	}
+
+	/**
+	 * Generate features content from extension metadata
+	 */
+	private _generateFeaturesContent(details: ExtensionDetails): string {
+		const sections: string[] = [];
+
+		// Keywords section
+		if (details.keywords && details.keywords.length > 0) {
+			sections.push(`
+				<div class="features-section">
+					<h2>Keywords</h2>
+					<div class="features-list">
+						${details.keywords.map(keyword => `<div class="feature-item">• ${keyword}</div>`).join('')}
+					</div>
+				</div>
+			`);
+		}
+
+		// Categories section
+		if (details.categories && details.categories.length > 0) {
+			sections.push(`
+				<div class="features-section">
+					<h2>Categories</h2>
+					<div class="features-list">
+						${details.categories.map(category => `<div class="feature-item">• ${category}</div>`).join('')}
+					</div>
+				</div>
+			`);
+		}
+
+		// Technical Information section
+		sections.push(`
+			<div class="troubleshooting-section">
+				<h2>Technical Information</h2>
+				
+				${details.engines && Object.keys(details.engines).length > 0 ? `
+				<div class="troubleshooting-item">
+					<div class="troubleshooting-title">Engine Requirements:</div>
+					<div class="troubleshooting-content">
+						${Object.entries(details.engines).map(([engine, version]) =>
+							`<code>${engine}: ${version}</code>`
+						).join('<br>')}
+					</div>
+				</div>
+				` : ''}
+				
+				<div class="troubleshooting-item">
+					<div class="troubleshooting-title">Installation:</div>
+					<div class="troubleshooting-content">
+						This extension is installed from a local VSIX file. Updates must be done manually by replacing the VSIX file and reinstalling.
+					</div>
+				</div>
+				
+				<div class="troubleshooting-item">
+					<div class="troubleshooting-title">Extension Restart:</div>
+					<div class="troubleshooting-content">
+						After installing, updating, or uninstalling, VS Code will prompt to restart extensions or reload the window for changes to take effect.
+					</div>
+				</div>
+
+				<div class="troubleshooting-item">
+					<div class="troubleshooting-title">File Information:</div>
+					<div class="troubleshooting-content">
+						<strong>Size:</strong> ${VsixUtils.formatFileSize(details.fileSize)}<br>
+						<strong>Last Modified:</strong> ${details.lastModified.toLocaleDateString()}<br>
+						<strong>Version:</strong> ${details.version}
+					</div>
+				</div>
+			</div>
+		`);
+
+		// If no features are available, show a default message
+		if (sections.length === 1) { // Only technical information
+			sections.unshift(`
+				<div class="features-section">
+					<h2>Extension Features</h2>
+					<p>No specific features or keywords are defined for this extension. Check the Details tab for more information about what this extension provides.</p>
+				</div>
+			`);
+		}
+
+		return sections.join('');
 	}
 
 	private _shortenPath(filePath: string): string {
