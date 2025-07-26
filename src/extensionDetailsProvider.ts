@@ -529,7 +529,8 @@ export class ExtensionDetailsProvider {
 		
 		document.addEventListener('click', function(e) {
 			const link = e.target.closest('a');
-			if (link && link.href && !link.href.startsWith('javascript:') && link.href !== window.location.href + '#') {
+			// Exclude resource-link class to prevent double opening
+			if (link && !link.classList.contains('resource-link') && link.href && !link.href.startsWith('javascript:') && link.href !== window.location.href + '#') {
 				e.preventDefault();
 				const href = link.getAttribute('href') || link.href;
 				if (href && href !== '#' && !href.startsWith('javascript:')) {
