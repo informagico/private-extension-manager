@@ -157,13 +157,6 @@
 	transform: translateY(1px);
 }
 
-/* Ensure codicon fonts are loaded for the settings gear */
-.settings-gear::before {
-	font-family: codicon;
-	font-size: 16px;
-	content: "\eab2"; /* codicon-gear unicode */
-}
-
 /* Content area that contains both main and sidebar */
 .content-area {
 	flex: 1;
@@ -727,33 +720,4 @@
 	to {
 		transform: rotate(360deg);
 	}
-}
-
-/* Additional styling to ensure the settings button is visible and accessible */
-.extension-actions .settings-gear {
-	margin-left: 8px;
-	order: 999; /* Ensure it appears last in the flex container */
-	flex-shrink: 0;
-}
-
-/* Tooltip for settings gear */
-.settings-gear {
-	position: relative;
-}
-
-.settings-gear:hover::after {
-	content: "Open Settings";
-	position: absolute;
-	bottom: -30px;
-	left: 50%;
-	transform: translateX(-50%);
-	background-color: var(--vscode-editorHoverWidget-background);
-	color: var(--vscode-editorHoverWidget-foreground);
-	border: 1px solid var(--vscode-editorHoverWidget-border);
-	padding: 4px 8px;
-	border-radius: 3px;
-	font-size: 11px;
-	white-space: nowrap;
-	z-index: 1000;
-	pointer-events: none;
 }
