@@ -14,7 +14,7 @@
 	// Restore search state and selection on load
 	function restoreSearchState() {
 		const state = vscode.getState();
-		if (state && state.searchTerm) {
+		if (state && state.searchTerm !== undefined) {
 			currentSearchTerm = state.searchTerm;
 			if (searchInput) {
 				searchInput.value = currentSearchTerm;
@@ -29,24 +29,42 @@
 
 	// Save search state and selection
 	function saveState(searchTerm, extensionId) {
-		currentSearchTerm = searchTerm || currentSearchTerm;
-		selectedExtensionId = extensionId !== undefined ? extensionId : selectedExtensionId;
-		vscode.setState({ 
+		if (searchTerm !== undefined) {
+			currentSearchTerm = searchTerm;
+		}
+		if (extensionId !== undefined) {
+			selectedExtensionId = extensionId;
+		}
+		vscode.setState({
 			searchTerm: currentSearchTerm,
-			selectedExtensionId: selectedExtensionId
+			selectedExtensionId: selectedExtensionId,
 		});
+	}
+
+	// Clear search state completely
+	function clearSearchState() {
+		currentSearchTerm = "";
+		selectedExtensionId = "";
+		if (searchInput) {
+			searchInput.value = "";
+		}
+		saveState("", "");
+		filterItems("");
+		updateSelectionUI("");
 	}
 
 	// Update the UI to show selected item
 	function updateSelectionUI(extensionId) {
 		// Remove previous selection
-		document.querySelectorAll(".item.selected").forEach(item => {
+		document.querySelectorAll(".item.selected").forEach((item) => {
 			item.classList.remove("selected");
 		});
 
 		// Add selection to new item
 		if (extensionId) {
-			const selectedItem = document.querySelector(`[data-item-id="${extensionId}"]`);
+			const selectedItem = document.querySelector(
+				`[data-item-id="${extensionId}"]`
+			);
 			if (selectedItem) {
 				selectedItem.classList.add("selected");
 			}
@@ -74,8 +92,17 @@
 	if (searchInput) {
 		searchInput.addEventListener("input", (e) => {
 			const searchTerm = e.target.value.toLowerCase();
-			saveState(searchTerm);
+			saveState(searchTerm, undefined);
 			filterItems(searchTerm);
+		});
+
+		// Add clear button functionality
+		searchInput.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				clearSearchState();
+				searchInput.blur();
+			}
 		});
 	}
 
@@ -243,24 +270,29 @@
 
 	// Keyboard shortcuts
 	document.addEventListener("keydown", (e) => {
-		// Escape to clear search and selection
+		// Escape to clear search and selection - only when search input is focused
 		if (e.key === "Escape" && document.activeElement === searchInput) {
-			searchInput.value = "";
-			selectedExtensionId = "";
-			saveState("", "");
-			filterItems("");
-			updateSelectionUI("");
+			e.preventDefault();
+			clearSearchState();
 			searchInput.blur();
+			return;
 		}
 
-		// Arrow key navigation
-		if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+		// Arrow key navigation - only when search input is not focused
+		if (
+			(e.key === "ArrowUp" || e.key === "ArrowDown") &&
+			document.activeElement !== searchInput
+		) {
 			e.preventDefault();
 			navigateSelection(e.key === "ArrowDown");
 		}
 
-		// Enter to open selected item
-		if (e.key === "Enter" && selectedExtensionId) {
+		// Enter to open selected item - only when search input is not focused
+		if (
+			e.key === "Enter" &&
+			selectedExtensionId &&
+			document.activeElement !== searchInput
+		) {
 			e.preventDefault();
 			vscode.postMessage({
 				command: "itemClicked",
@@ -272,7 +304,7 @@
 	// Navigation with arrow keys
 	function navigateSelection(goDown) {
 		const visibleItems = Array.from(document.querySelectorAll(".item")).filter(
-			item => item.style.display !== "none"
+			(item) => item.style.display !== "none"
 		);
 
 		if (visibleItems.length === 0) return;
@@ -280,7 +312,7 @@
 		let currentIndex = -1;
 		if (selectedExtensionId) {
 			currentIndex = visibleItems.findIndex(
-				item => item.getAttribute("data-item-id") === selectedExtensionId
+				(item) => item.getAttribute("data-item-id") === selectedExtensionId
 			);
 		}
 
@@ -301,7 +333,7 @@
 			// Scroll item into view
 			newSelectedItem.scrollIntoView({
 				behavior: "smooth",
-				block: "nearest"
+				block: "nearest",
 			});
 		}
 	}
@@ -331,13 +363,13 @@
 					console.log("Setting up event listeners after scan complete");
 					setupItemEventListeners();
 					restoreSearchState();
-					
+
 					// Restore selection if provided
 					if (message.selectedExtensionId) {
 						selectedExtensionId = message.selectedExtensionId;
 						updateSelectionUI(selectedExtensionId);
 					}
-					
+
 					if (message.count !== undefined) {
 						// Only show toast for manual refreshes, not automatic ones
 						const isManualRefresh = document.querySelector(".loading") !== null;
@@ -360,6 +392,11 @@
 					saveState(undefined, selectedExtensionId);
 					updateSelectionUI(selectedExtensionId);
 				}
+				break;
+
+			case "clearSearch":
+				// Clear search from external command
+				clearSearchState();
 				break;
 
 			case "installComplete":
@@ -516,6 +553,7 @@
 		setupItemEventListeners,
 		restoreSearchState,
 		updateSelectionUI,
+		clearSearchState,
 		currentSearchTerm: () => currentSearchTerm,
 		selectedExtensionId: () => selectedExtensionId,
 	};
