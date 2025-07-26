@@ -27,8 +27,7 @@ export interface ExtensionDetails {
 }
 
 export class ExtensionDetailsProvider {
-	private _panel?: vscode.WebviewPanel;
-	private _extensionDetails?: ExtensionDetails;
+	private _activePanels: Map<string, vscode.WebviewPanel> = new Map();
 
 	constructor(
 		private readonly _extensionUri: vscode.Uri,
@@ -37,7 +36,7 @@ export class ExtensionDetailsProvider {
 
 	public async showExtensionDetails(filePath: string): Promise<void> {
 		try {
-			// Get the already-parsed extension data instead of parsing again
+			// Get the already-parsed extension data
 			const extensionInfo = this._findExtensionByFilePath(filePath);
 
 			if (!extensionInfo) {
@@ -46,54 +45,54 @@ export class ExtensionDetailsProvider {
 			}
 
 			// Build extension details from cached data
-			this._extensionDetails = this._buildExtensionDetails(extensionInfo);
+			const extensionDetails = this._buildExtensionDetails(extensionInfo);
 
-			// Create or show the webview panel
-			if (this._panel) {
-				this._panel.reveal(vscode.ViewColumn.One);
-			} else {
-				this._panel = vscode.window.createWebviewPanel(
-					'extensionDetails',
-					`${this._extensionDetails.title}`,
-					vscode.ViewColumn.One,
-					{
-						enableScripts: true,
-						localResourceRoots: [this._extensionUri],
-						retainContextWhenHidden: true
+			// create a new panel
+			const panelKey = `${extensionInfo.id}_${Date.now()}`;
+			const panel = vscode.window.createWebviewPanel(
+				'extensionDetails',
+				`${extensionDetails.title}`,
+				vscode.ViewColumn.One,
+				{
+					enableScripts: true,
+					localResourceRoots: [this._extensionUri],
+					retainContextWhenHidden: true
+				}
+			);
+
+			// Store the panel
+			this._activePanels.set(panelKey, panel);
+
+			panel.onDidDispose(() => {
+				this._activePanels.delete(panelKey);
+			});
+
+			panel.webview.onDidReceiveMessage(
+				message => {
+					console.log('Received message in extension:', message);
+					switch (message.command) {
+						case 'openUrl':
+							if (message.url) {
+								console.log('Opening external URL:', message.url);
+								vscode.env.openExternal(vscode.Uri.parse(message.url));
+							} else {
+								console.error('No URL provided in openUrl message');
+							}
+							break;
+						case 'installExtension':
+							this._handleInstallExtension(extensionInfo, panel);
+							break;
+						case 'uninstallExtension':
+							this._handleUninstallExtension(extensionInfo.id, panel);
+							break;
+						default:
+							console.log('Unknown message command:', message.command);
 					}
-				);
+				}
+			);
 
-				this._panel.onDidDispose(() => {
-					this._panel = undefined;
-				});
-
-				this._panel.webview.onDidReceiveMessage(
-					message => {
-						console.log('Received message in extension:', message);
-						switch (message.command) {
-							case 'openUrl':
-								if (message.url) {
-									console.log('Opening external URL:', message.url);
-									vscode.env.openExternal(vscode.Uri.parse(message.url));
-								} else {
-									console.error('No URL provided in openUrl message');
-								}
-								break;
-							case 'installExtension':
-								this._handleInstallExtension(extensionInfo);
-								break;
-							case 'uninstallExtension':
-								this._handleUninstallExtension(extensionInfo.id);
-								break;
-							default:
-								console.log('Unknown message command:', message.command);
-						}
-					}
-				);
-			}
-
-			// Update the webview content
-			this._panel.webview.html = this._getWebviewContent();
+			// Set the webview content for this specific panel
+			panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
 
 		} catch (error) {
 			console.error('Error showing extension details:', error);
@@ -106,7 +105,7 @@ export class ExtensionDetailsProvider {
 	 */
 	private _findExtensionByFilePath(filePath: string): ExtensionInfo | null {
 		// Search through all cached extensions to find one with matching file path
-		const allExtensions = this._storageProvider.searchExtensions(''); // Get all extensions
+		const allExtensions = this._storageProvider.searchExtensions('');
 
 		const extension = allExtensions.find(ext => ext.filePath === filePath);
 		return extension || null;
@@ -116,10 +115,8 @@ export class ExtensionDetailsProvider {
 	 * Build ExtensionDetails from cached ExtensionInfo (no re-parsing)
 	 */
 	private _buildExtensionDetails(extensionInfo: ExtensionInfo): ExtensionDetails {
-		// Extract bugs URL from repository if available
 		let bugsUrl: string | undefined;
 		if (extensionInfo.repository) {
-			// Try to construct bugs URL from repository URL
 			if (extensionInfo.repository.includes('github.com')) {
 				bugsUrl = `${extensionInfo.repository.replace(/\.git$/, '')}/issues`;
 			} else if (extensionInfo.repository.includes('gitlab.com')) {
@@ -163,72 +160,61 @@ export class ExtensionDetailsProvider {
 	/**
 	 * Handle extension installation from details view
 	 */
-	private async _handleInstallExtension(extensionInfo: ExtensionInfo): Promise<void> {
+	private async _handleInstallExtension(extensionInfo: ExtensionInfo, panel: vscode.WebviewPanel): Promise<void> {
 		try {
 			const success = await this._storageProvider.installExtension(extensionInfo);
-			if (success && this._panel) {
+			if (success) {
 				// Update the webview to reflect new installation status
-				this._extensionDetails = this._buildExtensionDetails(extensionInfo);
-				this._panel.webview.html = this._getWebviewContent();
+				const extensionDetails = this._buildExtensionDetails(extensionInfo);
+				panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
 
 				// Send message to update UI immediately
-				this._panel.webview.postMessage({
+				panel.webview.postMessage({
 					command: 'installComplete',
 					success: true
 				});
 			}
 		} catch (error) {
 			console.error('Error installing extension from details view:', error);
-			if (this._panel) {
-				this._panel.webview.postMessage({
-					command: 'installComplete',
-					success: false,
-					error: error instanceof Error ? error.message : String(error)
-				});
-			}
+			panel.webview.postMessage({
+				command: 'installComplete',
+				success: false,
+				error: error instanceof Error ? error.message : String(error)
+			});
 		}
 	}
 
 	/**
 	 * Handle extension uninstallation from details view
 	 */
-	private async _handleUninstallExtension(extensionId: string): Promise<void> {
+	private async _handleUninstallExtension(extensionId: string, panel: vscode.WebviewPanel): Promise<void> {
 		try {
 			const success = await this._storageProvider.uninstallExtension(extensionId);
-			if (success && this._panel) {
+			if (success) {
 				// Find updated extension info
 				const updatedExtensionInfo = this._storageProvider.getExtensionById(extensionId);
 				if (updatedExtensionInfo) {
-					this._extensionDetails = this._buildExtensionDetails(updatedExtensionInfo);
-					this._panel.webview.html = this._getWebviewContent();
+					const extensionDetails = this._buildExtensionDetails(updatedExtensionInfo);
+					panel.webview.html = this._getWebviewContent(extensionDetails, panel.webview);
 				}
 
 				// Send message to update UI immediately
-				this._panel.webview.postMessage({
+				panel.webview.postMessage({
 					command: 'uninstallComplete',
 					success: true
 				});
 			}
 		} catch (error) {
 			console.error('Error uninstalling extension from details view:', error);
-			if (this._panel) {
-				this._panel.webview.postMessage({
-					command: 'uninstallComplete',
-					success: false,
-					error: error instanceof Error ? error.message : String(error)
-				});
-			}
+			panel.webview.postMessage({
+				command: 'uninstallComplete',
+				success: false,
+				error: error instanceof Error ? error.message : String(error)
+			});
 		}
 	}
 
-	private _getWebviewContent(): string {
-		if (!this._extensionDetails || !this._panel) {
-			return '';
-		}
-
-		const webview = this._panel.webview;
-		const details = this._extensionDetails;
-
+	private _getWebviewContent(details: ExtensionDetails, webview: vscode.Webview): string {
 		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'reset.css'));
 		const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vscode.css'));
 		const styleDetailsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'extension-details.css'));
@@ -591,5 +577,13 @@ export class ExtensionDetailsProvider {
 			text += possible.charAt(Math.floor(Math.random() * possible.length));
 		}
 		return text;
+	}
+
+	/**
+	 * Dispose all active panels
+	 */
+	public dispose(): void {
+		this._activePanels.forEach(panel => panel.dispose());
+		this._activePanels.clear();
 	}
 }

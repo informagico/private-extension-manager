@@ -29,6 +29,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 	private _loadingPromise?: Promise<void>;
 	private _isScanning = false;
 	private _detailsProvider: ExtensionDetailsProvider;
+	private _selectedExtensionId?: string;
 
 	constructor(private readonly _extensionUri: vscode.Uri, private readonly _context: vscode.ExtensionContext) {
 		this._storageProvider = new StorageProvider(_context);
@@ -46,10 +47,11 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 				console.log('Refreshing webview with new data');
 				this._view.webview.html = this._getHtmlForWebview(this._view.webview);
 
-				// Notify the webview that data has been refreshed
+				// Notify the webview that data has been refreshed and restore selection
 				this._view.webview.postMessage({
 					command: 'scanComplete',
-					count: this._items.length
+					count: this._items.length,
+					selectedExtensionId: this._selectedExtensionId
 				});
 			}
 		});
@@ -85,7 +87,8 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 			setTimeout(() => {
 				webviewView.webview.postMessage({
 					command: 'scanComplete',
-					count: this._items.length
+					count: this._items.length,
+					selectedExtensionId: this._selectedExtensionId
 				});
 			}, 100);
 		}
@@ -263,6 +266,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 			clearInterval(this._refreshInterval);
 		}
 		this._storageProvider.dispose();
+		this._detailsProvider.dispose();
 	}
 
 	private async loadExtensions(): Promise<void> {
@@ -316,7 +320,18 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		const item = this._items.find(i => i.id === itemId);
 		if (item && item.filePath) {
 			try {
-				// Use the updated details provider that doesn't re-parse
+				// Set the selected extension ID
+				this._selectedExtensionId = itemId;
+
+				// Update the webview to show selection
+				if (this._view) {
+					this._view.webview.postMessage({
+						command: 'setSelection',
+						selectedExtensionId: itemId
+					});
+				}
+
+				// Use the updated details provider that creates new windows
 				await this._detailsProvider.showExtensionDetails(item.filePath);
 			} catch (error) {
 				console.error('Error showing extension details:', error);
@@ -503,7 +518,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
                                 </div>
                             </div>
                         ` : this._getSortedItems().map(item => `
-                            <div class="item ${item.isInstalled ? 'installed' : 'not-installed'}" data-item-id="${item.id}" tabindex="0">
+                            <div class="item ${item.isInstalled ? 'installed' : 'not-installed'} ${this._selectedExtensionId === item.id ? 'selected' : ''}" data-item-id="${item.id}" tabindex="0">
                                 <div class="item-icon-container">
                                     <div class="item-main-icon">
                                         ${item.icon ? `

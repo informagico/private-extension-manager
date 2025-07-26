@@ -1,8 +1,9 @@
 (function () {
 	const vscode = acquireVsCodeApi();
 
-	// Preserve search state across refreshes
+	// Preserve search state and selection across refreshes
 	let currentSearchTerm = "";
+	let selectedExtensionId = "";
 
 	// Get references to DOM elements
 	const refreshBtn = document.getElementById("refresh-btn");
@@ -10,7 +11,7 @@
 	const searchInput = document.getElementById("search-input");
 	const itemsContainer = document.querySelector(".items-container");
 
-	// Restore search state on load
+	// Restore search state and selection on load
 	function restoreSearchState() {
 		const state = vscode.getState();
 		if (state && state.searchTerm) {
@@ -20,12 +21,36 @@
 				filterItems(currentSearchTerm);
 			}
 		}
+		if (state && state.selectedExtensionId) {
+			selectedExtensionId = state.selectedExtensionId;
+			updateSelectionUI(selectedExtensionId);
+		}
 	}
 
-	// Save search state
-	function saveSearchState(searchTerm) {
-		currentSearchTerm = searchTerm;
-		vscode.setState({ searchTerm: searchTerm });
+	// Save search state and selection
+	function saveState(searchTerm, extensionId) {
+		currentSearchTerm = searchTerm || currentSearchTerm;
+		selectedExtensionId = extensionId !== undefined ? extensionId : selectedExtensionId;
+		vscode.setState({ 
+			searchTerm: currentSearchTerm,
+			selectedExtensionId: selectedExtensionId
+		});
+	}
+
+	// Update the UI to show selected item
+	function updateSelectionUI(extensionId) {
+		// Remove previous selection
+		document.querySelectorAll(".item.selected").forEach(item => {
+			item.classList.remove("selected");
+		});
+
+		// Add selection to new item
+		if (extensionId) {
+			const selectedItem = document.querySelector(`[data-item-id="${extensionId}"]`);
+			if (selectedItem) {
+				selectedItem.classList.add("selected");
+			}
+		}
 	}
 
 	// Set up event listeners
@@ -49,7 +74,7 @@
 	if (searchInput) {
 		searchInput.addEventListener("input", (e) => {
 			const searchTerm = e.target.value.toLowerCase();
-			saveSearchState(searchTerm);
+			saveState(searchTerm);
 			filterItems(searchTerm);
 		});
 	}
@@ -77,6 +102,10 @@
 					!e.target.closest(".install-btn") &&
 					!e.target.closest(".update-btn")
 				) {
+					selectedExtensionId = itemId;
+					saveState(undefined, selectedExtensionId);
+					updateSelectionUI(selectedExtensionId);
+
 					vscode.postMessage({
 						command: "itemClicked",
 						itemId: itemId,
@@ -160,7 +189,7 @@
 				item.querySelector(".version")?.textContent?.toLowerCase() || "";
 
 			const isMatch =
-				!searchTerm || // Show all if no search term
+				!searchTerm ||
 				title.includes(searchTerm) ||
 				description.includes(searchTerm) ||
 				author.includes(searchTerm) ||
@@ -176,7 +205,6 @@
 			}
 		});
 
-		// Show/hide empty state
 		showEmptyState(visibleCount === 0 && searchTerm !== "");
 	}
 
@@ -215,36 +243,68 @@
 
 	// Keyboard shortcuts
 	document.addEventListener("keydown", (e) => {
-		// Ctrl/Cmd + F to focus search
-		if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-			e.preventDefault();
-			if (searchInput) {
-				searchInput.focus();
-				searchInput.select();
-			}
-		}
-
-		// Escape to clear search
+		// Escape to clear search and selection
 		if (e.key === "Escape" && document.activeElement === searchInput) {
 			searchInput.value = "";
-			saveSearchState("");
+			selectedExtensionId = "";
+			saveState("", "");
 			filterItems("");
+			updateSelectionUI("");
 			searchInput.blur();
 		}
 
-		// Ctrl/Cmd + R to refresh
-		if ((e.ctrlKey || e.metaKey) && e.key === "r") {
+		// Arrow key navigation
+		if (e.key === "ArrowUp" || e.key === "ArrowDown") {
 			e.preventDefault();
-			showLoadingState(true);
-			vscode.postMessage({ command: "refresh" });
+			navigateSelection(e.key === "ArrowDown");
 		}
 
-		// Ctrl/Cmd + N to add new directory
-		if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+		// Enter to open selected item
+		if (e.key === "Enter" && selectedExtensionId) {
 			e.preventDefault();
-			vscode.postMessage({ command: "addItem" });
+			vscode.postMessage({
+				command: "itemClicked",
+				itemId: selectedExtensionId,
+			});
 		}
 	});
+
+	// Navigation with arrow keys
+	function navigateSelection(goDown) {
+		const visibleItems = Array.from(document.querySelectorAll(".item")).filter(
+			item => item.style.display !== "none"
+		);
+
+		if (visibleItems.length === 0) return;
+
+		let currentIndex = -1;
+		if (selectedExtensionId) {
+			currentIndex = visibleItems.findIndex(
+				item => item.getAttribute("data-item-id") === selectedExtensionId
+			);
+		}
+
+		let newIndex;
+		if (goDown) {
+			newIndex = currentIndex < visibleItems.length - 1 ? currentIndex + 1 : 0;
+		} else {
+			newIndex = currentIndex > 0 ? currentIndex - 1 : visibleItems.length - 1;
+		}
+
+		const newSelectedItem = visibleItems[newIndex];
+		if (newSelectedItem) {
+			const newSelectedId = newSelectedItem.getAttribute("data-item-id");
+			selectedExtensionId = newSelectedId;
+			saveState(undefined, selectedExtensionId);
+			updateSelectionUI(selectedExtensionId);
+
+			// Scroll item into view
+			newSelectedItem.scrollIntoView({
+				behavior: "smooth",
+				block: "nearest"
+			});
+		}
+	}
 
 	// Handle messages from the extension
 	window.addEventListener("message", (event) => {
@@ -271,6 +331,13 @@
 					console.log("Setting up event listeners after scan complete");
 					setupItemEventListeners();
 					restoreSearchState();
+					
+					// Restore selection if provided
+					if (message.selectedExtensionId) {
+						selectedExtensionId = message.selectedExtensionId;
+						updateSelectionUI(selectedExtensionId);
+					}
+					
 					if (message.count !== undefined) {
 						// Only show toast for manual refreshes, not automatic ones
 						const isManualRefresh = document.querySelector(".loading") !== null;
@@ -284,6 +351,15 @@
 						}
 					}
 				}, 50);
+				break;
+
+			case "setSelection":
+				// Set selection from sidebar provider
+				if (message.selectedExtensionId) {
+					selectedExtensionId = message.selectedExtensionId;
+					saveState(undefined, selectedExtensionId);
+					updateSelectionUI(selectedExtensionId);
+				}
 				break;
 
 			case "installComplete":
@@ -374,6 +450,11 @@
 			e.preventDefault();
 			const itemId = item.getAttribute("data-item-id");
 
+			// Set selection on right-click
+			selectedExtensionId = itemId;
+			saveState(undefined, selectedExtensionId);
+			updateSelectionUI(selectedExtensionId);
+
 			// Create context menu
 			const contextMenu = document.createElement("div");
 			contextMenu.className = "context-menu";
@@ -427,55 +508,6 @@
 		}
 	});
 
-	// Add drag and drop functionality for .vsix files - UPDATED to use CSS classes
-	document.addEventListener("dragover", (e) => {
-		e.preventDefault();
-		e.dataTransfer.dropEffect = "copy";
-
-		if (!document.querySelector(".drop-overlay")) {
-			const overlay = document.createElement("div");
-			overlay.className = "drop-overlay";
-			overlay.innerHTML = `
-                <div class="drop-overlay-content">
-                    <div class="codicon codicon-file drop-overlay-icon"></div>
-                    <div>Drop .vsix files here to install</div>
-                </div>
-            `;
-			document.body.appendChild(overlay);
-		}
-	});
-
-	document.addEventListener("dragleave", (e) => {
-		if (e.clientX === 0 || e.clientY === 0) {
-			const overlay = document.querySelector(".drop-overlay");
-			if (overlay) {
-				document.body.removeChild(overlay);
-			}
-		}
-	});
-
-	document.addEventListener("drop", (e) => {
-		e.preventDefault();
-		const overlay = document.querySelector(".drop-overlay");
-		if (overlay) {
-			document.body.removeChild(overlay);
-		}
-
-		const files = Array.from(e.dataTransfer.files);
-		const vsixFiles = files.filter((file) =>
-			file.name.toLowerCase().endsWith(".vsix")
-		);
-
-		if (vsixFiles.length > 0) {
-			showToast(
-				`Found ${vsixFiles.length} .vsix file${
-					vsixFiles.length === 1 ? "" : "s"
-				}. Install them through the file system.`,
-				"info"
-			);
-		}
-	});
-
 	// Expose functions globally for debugging
 	window.vscodeExtension = {
 		filterItems,
@@ -483,7 +515,9 @@
 		showLoadingState,
 		setupItemEventListeners,
 		restoreSearchState,
+		updateSelectionUI,
 		currentSearchTerm: () => currentSearchTerm,
+		selectedExtensionId: () => selectedExtensionId,
 	};
 
 	// Log when the script initializes

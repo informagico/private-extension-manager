@@ -1,4 +1,3 @@
-// src/extension.ts
 import * as vscode from 'vscode';
 import { PrivateExtensionsSidebarProvider } from './sidebarProvider';
 
@@ -160,7 +159,7 @@ async function loadExtensionsAtStartup(sidebarProvider: PrivateExtensionsSidebar
 				console.log(`Extension: Final extension count: ${extensionCount}`);
 				if (extensionCount > 0) {
 					console.log(`Extension: Loaded ${extensionCount} private extensions at startup`);
-					// Uncomment next line if you want a notification:
+					// Uncomment next line for a notification:
 					// vscode.window.showInformationMessage(`Loaded ${extensionCount} private extension${extensionCount === 1 ? '' : 's'}`);
 				}
 			} catch (error) {

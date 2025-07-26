@@ -72,6 +72,32 @@ body {
 	outline-offset: -1px;
 }
 
+/* Selected state styling */
+.item.selected {
+	background-color: var(--vscode-list-activeSelectionBackground) !important;
+	color: var(--vscode-list-activeSelectionForeground) !important;
+}
+
+.item.selected .item-title {
+	color: var(--vscode-list-activeSelectionForeground) !important;
+}
+
+.item.selected .item-description {
+	color: var(--vscode-list-activeSelectionForeground) !important;
+	opacity: 0.9;
+}
+
+.item.selected .author-name {
+	color: var(--vscode-list-activeSelectionForeground) !important;
+	opacity: 0.9;
+}
+
+.item.selected .version {
+	background-color: rgba(255, 255, 255, 0.2);
+	color: var(--vscode-list-activeSelectionForeground);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
 /* Icon column - first column */
 .item-icon-container {
 	flex-shrink: 0;
@@ -177,6 +203,10 @@ body {
 }
 
 .item:hover .item-actions {
+	opacity: 1;
+}
+
+.item.selected .item-actions {
 	opacity: 1;
 }
 
@@ -416,6 +446,11 @@ body {
 
 .item.not-installed {
 	border-left: 3px solid transparent;
+}
+
+/* Selection indicator */
+.item.selected {
+	border-left: 3px solid var(--vscode-focusBorder) !important;
 }
 
 /* Responsive adjustments - hide icon column when too narrow */
