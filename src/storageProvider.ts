@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { promisify } from 'util';
 import { VsixParser, VsixPackageJson, VsixManifest } from './vsixParser';
+import { OpenVSXClient, OpenVSXExtension } from './openVsxClient';
 
 const readdir = promisify(fs.readdir);
 
@@ -14,7 +15,7 @@ export interface ExtensionInfo {
 	author: string;
 	publisher: string;
 	icon?: string;
-	filePath: string;
+	filePath?: string;
 	fileSize: number;
 	lastModified: Date;
 	isInstalled: boolean;
@@ -43,6 +44,18 @@ export interface ExtensionInfo {
 	readme?: string;
 	changelog?: string;
 	iconBuffer?: Buffer;
+
+	// New properties for unified search
+	source: 'local' | 'openvsx';
+	namespace?: string;
+	downloadCount?: number;
+	rating?: number;
+	reviewCount?: number;
+	publishedDate?: string;
+	verified?: boolean;
+	deprecated?: boolean;
+	replacementId?: string;
+	openVsxData?: OpenVSXExtension;
 }
 
 export class StorageProvider {
@@ -54,14 +67,22 @@ export class StorageProvider {
 	private _initializationPromise?: Promise<void>;
 	private _isRefreshing = false;
 	private _initializationAttempted = false;
+	
+	// OpenVSX integration
+	private _openVsxClient: OpenVSXClient;
+	private _remoteExtensionCache: Map<string, ExtensionInfo> = new Map();
+	private _lastRemoteSearch: string = '';
+	private _remoteSearchResults: ExtensionInfo[] = [];
 
 	constructor(private context: vscode.ExtensionContext) {
 		console.log('StorageProvider: Constructor called');
 		
+		this._openVsxClient = new OpenVSXClient(context);
 		this.initializeWatchers();
 
 		vscode.workspace.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration('privateExtensionsSidebar.vsixDirectories')) {
+			if (e.affectsConfiguration('privateExtensionsSidebar.vsixDirectories') ||
+				e.affectsConfiguration('privateExtensionsSidebar.enableOpenVSX')) {
 				console.log('StorageProvider: Configuration changed, refreshing...');
 				this.refreshWatchers();
 				if (this._isInitialized) {
@@ -70,6 +91,470 @@ export class StorageProvider {
 			}
 		});
 	}
+
+	/**
+	 * Unified search that combines local and remote extensions
+	 */
+	public async searchExtensionsUnified(
+		query: string,
+		filters?: {
+			category?: string;
+			author?: string;
+			installed?: boolean;
+			hasUpdate?: boolean;
+			source?: 'local' | 'openvsx' | 'all';
+		}
+	): Promise<ExtensionInfo[]> {
+		const results: ExtensionInfo[] = [];
+		
+		// Always search local extensions
+		if (!filters?.source || filters.source === 'local' || filters.source === 'all') {
+			const localResults = this.searchExtensions(query, filters);
+			results.push(...localResults);
+		}
+
+		// Search OpenVSX if enabled and query is meaningful
+		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+		const minLength = config.get<number>('remoteSearchMinLength', 3);
+		
+		if ((!filters?.source || filters.source === 'openvsx' || filters.source === 'all') && 
+			query.trim().length >= minLength) {
+			
+			try {
+				const remoteResults = await this.searchOpenVSXExtensions(query, filters);
+				results.push(...remoteResults);
+			} catch (error) {
+				console.error('Error searching OpenVSX:', error);
+				// Don't fail the entire search if remote search fails
+			}
+		}
+
+		// Remove duplicates (prefer local versions)
+		const uniqueResults = this.deduplicateUnifiedResults(results);
+		
+		// Sort results: installed first, then by relevance/popularity
+		return this.sortUnifiedResults(uniqueResults, query);
+	}
+
+	/**
+	 * Search OpenVSX extensions
+	 */
+	private async searchOpenVSXExtensions(
+		query: string, 
+		filters?: {
+			category?: string;
+			author?: string;
+		}
+	): Promise<ExtensionInfo[]> {
+		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+		if (!config.get<boolean>('enableOpenVSX', true)) {
+			return [];
+		}
+
+		// Sanitize and validate query
+		const cleanQuery = query.trim();
+		if (cleanQuery.length === 0) {
+			return [];
+		}
+
+		// Use cache for repeated searches
+		if (config.get<boolean>('cacheRemoteResults', true) && 
+			this._lastRemoteSearch === cleanQuery && this._remoteSearchResults.length > 0) {
+			return this._remoteSearchResults.filter(ext => this.applyUnifiedFilters(ext, filters));
+		}
+
+		try {
+			const maxResults = config.get<number>('maxRemoteResults', 50);
+			
+			// Build search parameters
+			const searchParams: any = {
+				query: cleanQuery,
+				size: maxResults,
+				sortBy: 'relevance'  // Changed from sortOrder to sortBy
+			};
+
+			// Add category filter if provided
+			if (filters?.category && filters.category.trim().length > 0) {
+				searchParams.category = filters.category.trim();
+			}
+
+			console.log('OpenVSX: Searching with params:', searchParams);
+			const searchResult = await this._openVsxClient.searchExtensions(searchParams);
+
+			if (!searchResult || !searchResult.extensions) {
+				console.warn('OpenVSX: Invalid search result structure');
+				return [];
+			}
+
+			const convertedResults = searchResult.extensions.map(ext => {
+				const converted = this._openVsxClient.convertToUnifiedFormat(ext);
+				
+				// Check if locally installed
+				converted.isInstalled = this.isExtensionInstalled(converted.id);
+				
+				// Check for updates if installed
+				if (converted.isInstalled) {
+					const installedExtension = vscode.extensions.getExtension(converted.id);
+					if (installedExtension) {
+						const installedVersion = installedExtension.packageJSON.version;
+						converted.hasUpdate = this.compareVersions(converted.version, installedVersion) > 0;
+					}
+				}
+
+				return converted as ExtensionInfo;
+			});
+
+			// Cache results
+			if (config.get<boolean>('cacheRemoteResults', true)) {
+				this._lastRemoteSearch = cleanQuery;
+				this._remoteSearchResults = convertedResults;
+			}
+			
+			// Cache individual extensions
+			convertedResults.forEach(ext => {
+				this._remoteExtensionCache.set(ext.id, ext);
+			});
+
+			console.log(`OpenVSX: Found ${convertedResults.length} extensions for query "${cleanQuery}"`);
+			return convertedResults.filter(ext => this.applyUnifiedFilters(ext, filters));
+		} catch (error) {
+			console.error('Error searching OpenVSX:', error);
+			return [];
+		}
+	}
+
+	/**
+	 * Apply filters to unified results
+	 */
+	private applyUnifiedFilters(
+		ext: ExtensionInfo, 
+		filters?: {
+			category?: string;
+			author?: string;
+			installed?: boolean;
+			hasUpdate?: boolean;
+		}
+	): boolean {
+		if (filters?.category && (!ext.categories || !ext.categories.includes(filters.category))) {
+			return false;
+		}
+
+		if (filters?.author && ext.author !== filters.author) {
+			return false;
+		}
+
+		if (filters?.installed !== undefined && ext.isInstalled !== filters.installed) {
+			return false;
+		}
+
+		if (filters?.hasUpdate !== undefined && ext.hasUpdate !== filters.hasUpdate) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Remove duplicates from unified results, preferring local versions
+	 */
+	private deduplicateUnifiedResults(results: ExtensionInfo[]): ExtensionInfo[] {
+		const extensionMap = new Map<string, ExtensionInfo>();
+
+		for (const ext of results) {
+			const existing = extensionMap.get(ext.id);
+			
+			if (!existing) {
+				extensionMap.set(ext.id, ext);
+			} else {
+				// Prefer local extensions
+				if (ext.source === 'local' && existing.source === 'openvsx') {
+					extensionMap.set(ext.id, ext);
+				}
+				// For same source, prefer higher version
+				else if (ext.source === existing.source && 
+						 this.compareVersions(ext.version, existing.version) > 0) {
+					extensionMap.set(ext.id, ext);
+				}
+			}
+		}
+
+		return Array.from(extensionMap.values());
+	}
+
+	/**
+	 * Sort unified results by relevance and status
+	 */
+	private sortUnifiedResults(results: ExtensionInfo[], query: string): ExtensionInfo[] {
+		const queryLower = query.toLowerCase();
+		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+		const preferLocal = config.get<boolean>('preferLocalExtensions', true);
+		
+		return results.sort((a, b) => {
+			// Priority 1: Installed extensions first
+			if (a.isInstalled && !b.isInstalled) return -1;
+			if (!a.isInstalled && b.isInstalled) return 1;
+
+			// Priority 2: Extensions with updates
+			if (a.hasUpdate && !b.hasUpdate) return -1;
+			if (!a.hasUpdate && b.hasUpdate) return 1;
+
+			// Priority 3: Local extensions over remote (if preference enabled)
+			if (preferLocal && a.source !== b.source) {
+				if (a.source === 'local' && b.source === 'openvsx') return -1;
+				if (a.source === 'openvsx' && b.source === 'local') return 1;
+			}
+
+			// Priority 4: Exact title matches
+			const aExactMatch = a.title.toLowerCase() === queryLower;
+			const bExactMatch = b.title.toLowerCase() === queryLower;
+			if (aExactMatch && !bExactMatch) return -1;
+			if (!aExactMatch && bExactMatch) return 1;
+
+			// Priority 5: Title starts with query
+			const aTitleStarts = a.title.toLowerCase().startsWith(queryLower);
+			const bTitleStarts = b.title.toLowerCase().startsWith(queryLower);
+			if (aTitleStarts && !bTitleStarts) return -1;
+			if (!aTitleStarts && bTitleStarts) return 1;
+
+			// Priority 6: For remote extensions, sort by download count
+			if (a.source === 'openvsx' && b.source === 'openvsx') {
+				const aDownloads = a.downloadCount || 0;
+				const bDownloads = b.downloadCount || 0;
+				if (aDownloads !== bDownloads) {
+					return bDownloads - aDownloads;
+				}
+			}
+
+			// Final sort: alphabetical
+			return a.title.localeCompare(b.title);
+		});
+	}
+
+	/**
+	 * Install extension from OpenVSX
+	 */
+	public async installOpenVSXExtension(extensionInfo: ExtensionInfo): Promise<boolean> {
+		if (extensionInfo.source !== 'openvsx' || !extensionInfo.namespace) {
+			throw new Error('Extension is not from OpenVSX');
+		}
+
+		try {
+			// Show progress for download
+			return await vscode.window.withProgress({
+				location: vscode.ProgressLocation.Notification,
+				title: `Downloading ${extensionInfo.title}...`,
+				cancellable: false
+			}, async (progress) => {
+				progress.report({ increment: 0, message: "Connecting to OpenVSX..." });
+
+				// Download the extension
+				const vsixPath = await this._openVsxClient.downloadExtension(
+					extensionInfo.namespace!,
+					extensionInfo.title,
+					extensionInfo.version,
+					undefined,
+					(downloaded, total) => {
+						const percentage = (downloaded / total) * 90; // Reserve 10% for installation
+						progress.report({ 
+							increment: percentage - ((progress as any).lastReported || 0),
+							message: `Downloading... ${Math.round(percentage)}%`
+						});
+						(progress as any).lastReported = percentage;
+					}
+				);
+
+				progress.report({ increment: 90, message: "Installing..." });
+
+				// Install the downloaded VSIX
+				await vscode.commands.executeCommand('workbench.extensions.installExtension',
+					vscode.Uri.file(vsixPath));
+
+				// Update extension status
+				extensionInfo.isInstalled = true;
+				extensionInfo.hasUpdate = false;
+				
+				// Add to local cache
+				this._extensionCache.set(extensionInfo.id, extensionInfo);
+
+				progress.report({ increment: 100, message: "Complete" });
+
+				// Show success message
+				vscode.window.showInformationMessage(`Successfully installed ${extensionInfo.title}`);
+
+				// Trigger extension restart
+				setTimeout(async () => {
+					await this.handleExtensionRestart('install', extensionInfo.title);
+				}, 1000);
+
+				return true;
+			});
+		} catch (error) {
+			console.error('Error installing OpenVSX extension:', error);
+			vscode.window.showErrorMessage(`Failed to install ${extensionInfo.title}: ${error}`);
+			return false;
+		}
+	}
+
+	/**
+	 * Get extension details for remote extensions
+	 */
+	public async getRemoteExtensionDetails(extensionId: string): Promise<ExtensionInfo | null> {
+		// Check cache first
+		if (this._remoteExtensionCache.has(extensionId)) {
+			return this._remoteExtensionCache.get(extensionId)!;
+		}
+
+		// Parse extension ID (namespace.name)
+		const [namespace, name] = extensionId.split('.');
+		if (!namespace || name) {
+			return null;
+		}
+
+		try {
+			const openVsxExt = await this._openVsxClient.getExtension(namespace, name);
+			const converted = this._openVsxClient.convertToUnifiedFormat(openVsxExt);
+			
+			// Check installation status
+			converted.isInstalled = this.isExtensionInstalled(converted.id);
+			if (converted.isInstalled) {
+				const installedExtension = vscode.extensions.getExtension(converted.id);
+				if (installedExtension) {
+					const installedVersion = installedExtension.packageJSON.version;
+					converted.hasUpdate = this.compareVersions(converted.version, installedVersion) > 0;
+				}
+			}
+
+			// Get additional content
+			try {
+				const [readme, changelog] = await Promise.all([
+					this._openVsxClient.getExtensionReadme(namespace, name),
+					this._openVsxClient.getExtensionChangelog(namespace, name)
+				]);
+				
+				converted.readme = readme || undefined;
+				converted.changelog = changelog || undefined;
+			} catch (error) {
+				console.warn(`Error fetching additional content for ${extensionId}:`, error);
+			}
+
+			const result = converted as ExtensionInfo;
+			
+			// Cache the result
+			this._remoteExtensionCache.set(extensionId, result);
+			
+			return result;
+		} catch (error) {
+			console.error(`Error getting remote extension details for ${extensionId}:`, error);
+			return null;
+		}
+	}
+
+	/**
+	 * Clear remote extension cache
+	 */
+	public clearRemoteCache(): void {
+		this._remoteExtensionCache.clear();
+		this._lastRemoteSearch = '';
+		this._remoteSearchResults = [];
+		this._openVsxClient.clearCache();
+	}
+
+	/**
+	 * Get popular extensions from OpenVSX
+	 */
+	public async getPopularExtensions(size: number = 20): Promise<ExtensionInfo[]> {
+		try {
+			const popular = await this._openVsxClient.getPopularExtensions(size);
+			return popular.map(ext => {
+				const converted = this._openVsxClient.convertToUnifiedFormat(ext);
+				converted.isInstalled = this.isExtensionInstalled(converted.id);
+				if (converted.isInstalled) {
+					const installedExtension = vscode.extensions.getExtension(converted.id);
+					if (installedExtension) {
+						const installedVersion = installedExtension.packageJSON.version;
+						converted.hasUpdate = this.compareVersions(converted.version, installedVersion) > 0;
+					}
+				}
+				return converted as ExtensionInfo;
+			});
+		} catch (error) {
+			console.error('Error getting popular extensions:', error);
+			return [];
+		}
+	}
+
+	/**
+	 * Handle extension restart with user-configurable behavior
+	 */
+	private async handleExtensionRestart(operation: 'install' | 'update' | 'uninstall', extensionName: string): Promise<void> {
+		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
+		const autoRestart = config.get<boolean>('autoRestartAfterInstall', false);
+		const restartMethod = config.get<string>('restartMethod', 'prompt');
+
+		if (autoRestart && restartMethod !== 'prompt') {
+			const action = operation === 'install' ? 'installed' : operation === 'update' ? 'updated' : 'uninstalled';
+			
+			vscode.window.showInformationMessage(
+				`${extensionName} ${action} successfully. Restarting extensions...`
+			);
+			
+			setTimeout(async () => {
+				try {
+					if (restartMethod === 'extensionHost') {
+						await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
+					} else {
+						await vscode.commands.executeCommand('workbench.action.reloadWindow');
+					}
+				} catch (error) {
+					console.error('Error during automatic restart:', error);
+					vscode.window.showWarningMessage(
+						'Failed to restart automatically. Please reload the window manually.'
+					);
+				}
+			}, 1000);
+		} else {
+			const action = operation === 'install' ? 'installed' : operation === 'update' ? 'updated' : 'uninstalled';
+			const choice = await vscode.window.showInformationMessage(
+				`${extensionName} ${action} successfully. Choose how to apply changes:`,
+				'Restart Extensions',
+				'Reload Window',
+				'Later'
+			);
+
+			switch (choice) {
+				case 'Restart Extensions':
+					try {
+						await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
+						vscode.window.showInformationMessage('Extension host restarted successfully.');
+					} catch (error) {
+						const fallbackChoice = await vscode.window.showWarningMessage(
+							'Extension host restart failed. Reload the window instead?',
+							'Reload Window',
+							'Cancel'
+						);
+						if (fallbackChoice === 'Reload Window') {
+							await vscode.commands.executeCommand('workbench.action.reloadWindow');
+						}
+					}
+					break;
+				case 'Reload Window':
+					await vscode.commands.executeCommand('workbench.action.reloadWindow');
+					break;
+				case 'Later':
+					vscode.window.showInformationMessage(
+						'Extension changes will take effect after the next window reload.',
+						'Reload Now'
+					).then(choice => {
+						if (choice === 'Reload Now') {
+							vscode.commands.executeCommand('workbench.action.reloadWindow');
+						}
+					});
+					break;
+			}
+		}
+	}
+
+	// Original methods from the existing StorageProvider...
 
 	/**
 	 * Triggers VS Code to restart extensions
@@ -112,57 +597,10 @@ export class StorageProvider {
 		}
 	}
 
-	/**
-	 * Alternative method for automatic restart with user preference
-	 */
-	private async handleExtensionRestart(operation: 'install' | 'update' | 'uninstall', extensionName: string): Promise<void> {
-		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
-		const autoRestart = config.get<boolean>('autoRestartAfterInstall', false);
-
-		if (autoRestart) {
-			// Automatic restart without prompt
-			vscode.window.showInformationMessage(
-				`${extensionName} ${operation}ed successfully. Restarting extensions...`
-			);
-			
-			setTimeout(async () => {
-				try {
-					await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
-				} catch (error) {
-					await vscode.commands.executeCommand('workbench.action.reloadWindow');
-				}
-			}, 1000);
-		} else {
-			// Prompt user for restart
-			const action = operation === 'install' ? 'installed' : operation === 'update' ? 'updated' : 'uninstalled';
-			const choice = await vscode.window.showInformationMessage(
-				`${extensionName} ${action} successfully. Restart extensions to take effect?`,
-				'Restart Extensions',
-				'Reload Window',
-				'Later'
-			);
-
-			switch (choice) {
-				case 'Restart Extensions':
-					try {
-						await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
-						vscode.window.showInformationMessage('Extension host restarted successfully.');
-					} catch (error) {
-						console.warn('Extension host restart failed, falling back to reload:', error);
-						await vscode.commands.executeCommand('workbench.action.reloadWindow');
-					}
-					break;
-				case 'Reload Window':
-					await vscode.commands.executeCommand('workbench.action.reloadWindow');
-					break;
-			}
-		}
-	}
-
 	public async installExtension(extensionInfo: ExtensionInfo): Promise<boolean> {
 		try {
 			await vscode.commands.executeCommand('workbench.extensions.installExtension',
-				vscode.Uri.file(extensionInfo.filePath));
+				vscode.Uri.file(extensionInfo.filePath!));
 
 			extensionInfo.isInstalled = true;
 			extensionInfo.hasUpdate = false;
@@ -229,7 +667,6 @@ export class StorageProvider {
 		}
 	}
 
-	// Rest of the class remains the same...
 	private async initialize(): Promise<void> {
 		console.log('StorageProvider: initialize() called, _isInitialized:', this._isInitialized, '_initializationAttempted:', this._initializationAttempted);
 		
@@ -339,14 +776,14 @@ export class StorageProvider {
 	 * Get extension with all parsed data by ID
 	 */
 	public getExtensionById(id: string): ExtensionInfo | undefined {
-		return this._extensionCache.get(id);
+		return this._extensionCache.get(id) || this._remoteExtensionCache.get(id);
 	}
 
 	/**
 	 * Get detailed extension info (already parsed)
 	 */
 	public getExtensionDetails(extensionId: string): ExtensionInfo | null {
-		const extension = this._extensionCache.get(extensionId);
+		const extension = this._extensionCache.get(extensionId) || this._remoteExtensionCache.get(extensionId);
 		return extension || null;
 	}
 
@@ -403,8 +840,56 @@ export class StorageProvider {
 		this._watchers.forEach(watcher => watcher.close());
 		this._watchers = [];
 		this._onDidChangeEmitter.dispose();
+		this.clearRemoteCache();
 	}
 
+	// Original search method for local extensions
+	public searchExtensions(
+		query: string,
+		filters?: {
+			category?: string;
+			author?: string;
+			installed?: boolean;
+			hasUpdate?: boolean;
+		}
+	): ExtensionInfo[] {
+		const allExtensions = Array.from(this._extensionCache.values());
+		const queryLower = query.toLowerCase();
+
+		return allExtensions.filter(ext => {
+			const matchesQuery = !query ||
+				ext.title.toLowerCase().includes(queryLower) ||
+				ext.description.toLowerCase().includes(queryLower) ||
+				ext.author.toLowerCase().includes(queryLower) ||
+				ext.publisher.toLowerCase().includes(queryLower) ||
+				(ext.keywords && ext.keywords.some(keyword => keyword.toLowerCase().includes(queryLower))) ||
+				(ext.tags && ext.tags.some(tag => tag.toLowerCase().includes(queryLower)));
+
+			if (!matchesQuery) return false;
+
+			if (filters) {
+				if (filters.category && (!ext.categories || !ext.categories.includes(filters.category))) {
+					return false;
+				}
+
+				if (filters.author && ext.author !== filters.author) {
+					return false;
+				}
+
+				if (filters.installed !== undefined && ext.isInstalled !== filters.installed) {
+					return false;
+				}
+
+				if (filters.hasUpdate !== undefined && ext.hasUpdate !== filters.hasUpdate) {
+					return false;
+				}
+			}
+
+			return true;
+		});
+	}
+
+	// Continue with remaining original methods...
 	private getConfiguredDirectories(): string[] {
 		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
 		const directories = config.get<string[]>('vsixDirectories', []);
@@ -532,7 +1017,10 @@ export class StorageProvider {
 				manifestRaw: manifest || undefined,
 				readme: readme || undefined,
 				changelog: changelog || undefined,
-				iconBuffer: iconBuffer
+				iconBuffer: iconBuffer,
+
+				// Mark as local extension
+				source: 'local'
 			};
 
 			return extensionInfo;
@@ -543,31 +1031,11 @@ export class StorageProvider {
 		}
 	}
 
+	// Continue with rest of original methods...
 	private extractExtensionDataWithManifestPriority(
 		manifest: VsixManifest | null,
 		packageJson: VsixPackageJson | null
-	): {
-		id: string;
-		title: string;
-		description: string;
-		version: string;
-		author: string;
-		publisher: string;
-		categories?: string[];
-		keywords?: string[];
-		repository?: string;
-		homepage?: string;
-		license?: string;
-		engines?: { [key: string]: string };
-		activationEvents?: string[];
-		main?: string;
-		preview?: boolean;
-		galleryBanner?: any;
-		tags?: string[];
-		galleryFlags?: string[];
-		targetPlatforms?: string[];
-		language?: string;
-	} {
+	): any {
 		// Extract from manifest first
 		let manifestData: any = {};
 		if (manifest?.PackageManifest?.Metadata?.[0]) {
@@ -816,51 +1284,6 @@ export class StorageProvider {
 		}
 	}
 
-	public searchExtensions(
-		query: string,
-		filters?: {
-			category?: string;
-			author?: string;
-			installed?: boolean;
-			hasUpdate?: boolean;
-		}
-	): ExtensionInfo[] {
-		const allExtensions = Array.from(this._extensionCache.values());
-		const queryLower = query.toLowerCase();
-
-		return allExtensions.filter(ext => {
-			const matchesQuery = !query ||
-				ext.title.toLowerCase().includes(queryLower) ||
-				ext.description.toLowerCase().includes(queryLower) ||
-				ext.author.toLowerCase().includes(queryLower) ||
-				ext.publisher.toLowerCase().includes(queryLower) ||
-				(ext.keywords && ext.keywords.some(keyword => keyword.toLowerCase().includes(queryLower))) ||
-				(ext.tags && ext.tags.some(tag => tag.toLowerCase().includes(queryLower)));
-
-			if (!matchesQuery) return false;
-
-			if (filters) {
-				if (filters.category && (!ext.categories || !ext.categories.includes(filters.category))) {
-					return false;
-				}
-
-				if (filters.author && ext.author !== filters.author) {
-					return false;
-				}
-
-				if (filters.installed !== undefined && ext.isInstalled !== filters.installed) {
-					return false;
-				}
-
-				if (filters.hasUpdate !== undefined && ext.hasUpdate !== filters.hasUpdate) {
-					return false;
-				}
-			}
-
-			return true;
-		});
-	}
-
 	public getStatistics(): {
 		total: number;
 		installed: number;
@@ -869,20 +1292,27 @@ export class StorageProvider {
 		byAuthor: { [author: string]: number };
 		byTag: { [tag: string]: number };
 		totalSize: number;
+		remote: number;
+		local: number;
 	} {
-		const extensions = Array.from(this._extensionCache.values());
+		const allExtensions = [
+			...Array.from(this._extensionCache.values()),
+			...Array.from(this._remoteExtensionCache.values())
+		];
 
 		const stats = {
-			total: extensions.length,
-			installed: extensions.filter(ext => ext.isInstalled).length,
-			needsUpdate: extensions.filter(ext => ext.hasUpdate).length,
+			total: allExtensions.length,
+			installed: allExtensions.filter(ext => ext.isInstalled).length,
+			needsUpdate: allExtensions.filter(ext => ext.hasUpdate).length,
 			byCategory: {} as { [category: string]: number },
 			byAuthor: {} as { [author: string]: number },
 			byTag: {} as { [tag: string]: number },
-			totalSize: extensions.reduce((sum, ext) => sum + ext.fileSize, 0)
+			totalSize: allExtensions.reduce((sum, ext) => sum + (ext.fileSize || 0), 0),
+			remote: allExtensions.filter(ext => ext.source === 'openvsx').length,
+			local: allExtensions.filter(ext => ext.source === 'local').length
 		};
 
-		extensions.forEach(ext => {
+		allExtensions.forEach(ext => {
 			if (ext.categories) {
 				ext.categories.forEach(category => {
 					stats.byCategory[category] = (stats.byCategory[category] || 0) + 1;
@@ -890,11 +1320,11 @@ export class StorageProvider {
 			}
 		});
 
-		extensions.forEach(ext => {
+		allExtensions.forEach(ext => {
 			stats.byAuthor[ext.author] = (stats.byAuthor[ext.author] || 0) + 1;
 		});
 
-		extensions.forEach(ext => {
+		allExtensions.forEach(ext => {
 			if (ext.tags) {
 				ext.tags.forEach(tag => {
 					stats.byTag[tag] = (stats.byTag[tag] || 0) + 1;

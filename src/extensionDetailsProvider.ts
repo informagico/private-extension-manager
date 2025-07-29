@@ -14,7 +14,7 @@ export interface ExtensionDetails {
 	icon?: string;
 	categories?: string[];
 	keywords?: string[];
-	filePath: string;
+	filePath?: string;
 	fileSize: number;
 	lastModified: Date;
 	readme?: string;
@@ -47,11 +47,11 @@ export class ExtensionDetailsProvider {
 		if (autoRestart && restartMethod !== 'prompt') {
 			// Automatic restart without prompt
 			const action = operation === 'install' ? 'installed' : operation === 'update' ? 'updated' : 'uninstalled';
-			
+
 			vscode.window.showInformationMessage(
 				`${extensionName} ${action} successfully. Restarting extensions...`
 			);
-			
+
 			setTimeout(async () => {
 				try {
 					if (restartMethod === 'extensionHost') {
@@ -125,7 +125,7 @@ export class ExtensionDetailsProvider {
 			if (existingPanel) {
 				// Focus the existing panel instead of creating a new one
 				existingPanel.reveal(vscode.ViewColumn.One);
-				
+
 				// Update the content in case the extension data has changed
 				const extensionDetails = this._buildExtensionDetails(extensionInfo);
 				existingPanel.webview.html = this._getWebviewContent(extensionDetails, existingPanel.webview);
@@ -239,8 +239,8 @@ export class ExtensionDetailsProvider {
 			categories: extensionInfo.categories,
 			keywords: extensionInfo.keywords,
 			filePath: extensionInfo.filePath,
-			fileSize: extensionInfo.fileSize,
-			lastModified: extensionInfo.lastModified,
+			fileSize: extensionInfo.fileSize || 0,
+			lastModified: extensionInfo.lastModified || new Date(),
 			readme: extensionInfo.readme,
 			changelog: extensionInfo.changelog,
 			repository: extensionInfo.repository,
@@ -257,7 +257,7 @@ export class ExtensionDetailsProvider {
 		try {
 			// Perform the installation FIRST
 			const success = await this._storageProvider.installExtension(extensionInfo);
-			
+
 			// Only send success feedback AFTER the operation completes
 			panel.webview.postMessage({
 				command: 'installComplete',
@@ -285,7 +285,7 @@ export class ExtensionDetailsProvider {
 		try {
 			// Perform the uninstallation FIRST
 			const success = await this._storageProvider.uninstallExtension(extensionId);
-			
+
 			// Only send success feedback AFTER the operation completes
 			panel.webview.postMessage({
 				command: 'uninstallComplete',
@@ -343,7 +343,7 @@ export class ExtensionDetailsProvider {
 		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'reset.css'));
 		const styleVSCodeUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vscode.css'));
 		const styleDetailsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'extension-details.css'));
-		
+
 		// Add codicons support
 		const codiconsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css'));
 
@@ -526,7 +526,7 @@ export class ExtensionDetailsProvider {
 					</div>
 					<div class="metadata-item">
 						<span class="metadata-label">File Path</span><br>
-						<span class="file-path" title="${details.filePath}">${this._shortenPath(details.filePath)}</span>
+						<span class="file-path" title="${details.filePath}">${this._shortenPath(details.filePath!)}</span>
 					</div>
 					${details.engines?.vscode ? `
 					<div class="metadata-item">
@@ -769,8 +769,8 @@ export class ExtensionDetailsProvider {
 					<div class="troubleshooting-title">Engine Requirements:</div>
 					<div class="troubleshooting-content">
 						${Object.entries(details.engines).map(([engine, version]) =>
-							`<code>${engine}: ${version}</code>`
-						).join('<br>')}
+			`<code>${engine}: ${version}</code>`
+		).join('<br>')}
 					</div>
 				</div>
 				` : ''}
