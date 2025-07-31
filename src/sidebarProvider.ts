@@ -17,13 +17,6 @@ interface SidebarItem {
 	lastModified?: Date;
 	categories?: string[];
 	keywords?: string[];
-	source: 'local' | 'openvsx';
-	namespace?: string;
-	downloadCount?: number;
-	rating?: number;
-	reviewCount?: number;
-	verified?: boolean;
-	deprecated?: boolean;
 }
 
 export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvider {
@@ -37,8 +30,6 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 	private _isScanning = false;
 	private _detailsProvider: ExtensionDetailsProvider;
 	private _selectedExtensionId?: string;
-	private _lastSearchQuery: string = '';
-	private _searchTimeout?: NodeJS.Timeout;
 
 	constructor(private readonly _extensionUri: vscode.Uri, private readonly _context: vscode.ExtensionContext) {
 		this._storageProvider = new StorageProvider(_context);
@@ -126,130 +117,11 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 					case 'addItem':
 						this.addDirectory();
 						break;
-					case 'search':
-						// Handle unified search
-						await this._handleUnifiedSearch(message.query);
-						break;
-					case 'clearRemoteCache':
-						this._storageProvider.clearRemoteCache();
-						vscode.window.showInformationMessage('Remote extension cache cleared');
-						break;
-					case 'showPopular':
-						await this.showPopularExtensions();
-						break;
-					case 'openUrl':
-						if (message.url) {
-							vscode.env.openExternal(vscode.Uri.parse(message.url));
-						}
-						break;
 				}
 			},
 			undefined,
 			[]
 		);
-	}
-
-	/**
-	 * Handle unified search (both local and remote)
-	 */
-	private async _handleUnifiedSearch(query: string): Promise<void> {
-		if (this._searchTimeout) {
-			clearTimeout(this._searchTimeout);
-		}
-
-		// Debounce search requests to avoid too many API calls
-		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
-		const debounceDelay = config.get<number>('searchDebounceDelay', 300);
-		const minLength = config.get<number>('remoteSearchMinLength', 3);
-
-		this._searchTimeout = setTimeout(async () => {
-			try {
-				this._lastSearchQuery = query;
-
-				// Show loading state for remote searches
-				if (query.trim().length >= minLength) {
-					if (this._view) {
-						this._view.webview.postMessage({
-							command: 'searchStarted',
-							query: query
-						});
-					}
-				}
-
-				// Perform unified search
-				const results = await this._storageProvider.searchExtensionsUnified(query, {
-					source: 'all'
-				});
-
-				// Convert to sidebar items
-				this._items = this.convertExtensionsToSidebarItems(results);
-
-				// Update webview
-				if (this._view) {
-					this._view.webview.html = this._getHtmlForWebview(this._view.webview);
-					this._view.webview.postMessage({
-						command: 'searchComplete',
-						count: this._items.length,
-						query: query,
-						hasRemoteResults: results.some(r => r.source === 'openvsx')
-					});
-				}
-
-			} catch (error) {
-				console.error('Error in unified search:', error);
-				if (this._view) {
-					this._view.webview.postMessage({
-						command: 'searchError',
-						message: `Search error: ${error}`,
-						query: query
-					});
-				}
-			}
-		}, query.trim().length >= minLength ? debounceDelay : 100);
-	}
-
-	/**
-	 * Show popular extensions from OpenVSX
-	 */
-	public async showPopularExtensions(): Promise<void> {
-		try {
-			const popular = await this._storageProvider.getPopularExtensions(20);
-			this._items = this.convertExtensionsToSidebarItems(popular);
-
-			if (this._view) {
-				this._view.webview.html = this._getHtmlForWebview(this._view.webview);
-				this._view.webview.postMessage({
-					command: 'searchComplete',
-					count: this._items.length,
-					query: 'popular',
-					hasRemoteResults: true
-				});
-			}
-
-			vscode.window.showInformationMessage(`Showing ${popular.length} popular extensions from OpenVSX`);
-		} catch (error) {
-			console.error('Error showing popular extensions:', error);
-			vscode.window.showErrorMessage(`Failed to load popular extensions: ${error}`);
-		}
-	}
-
-	/**
-	 * Clear all caches
-	 */
-	public async clearAllCaches(): Promise<void> {
-		this._storageProvider.clearRemoteCache();
-		await this.scanDirectories();
-	}
-
-	/**
-	 * Clear remote cache only
-	 */
-	public async clearRemoteCache(): Promise<void> {
-		this._storageProvider.clearRemoteCache();
-		// Refresh current view if it contains remote results
-		if (this._items.some(item => item.source === 'openvsx')) {
-			await this._handleUnifiedSearch(this._lastSearchQuery);
-		}
 	}
 
 	/**
@@ -393,9 +265,6 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		if (this._refreshInterval) {
 			clearInterval(this._refreshInterval);
 		}
-		if (this._searchTimeout) {
-			clearTimeout(this._searchTimeout);
-		}
 		this._storageProvider.dispose();
 		this._detailsProvider.dispose();
 	}
@@ -427,14 +296,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 			fileSize: ext.fileSize,
 			lastModified: ext.lastModified,
 			categories: ext.categories,
-			keywords: ext.keywords,
-			source: ext.source,
-			namespace: ext.namespace,
-			downloadCount: ext.downloadCount,
-			rating: ext.rating,
-			reviewCount: ext.reviewCount,
-			verified: ext.verified,
-			deprecated: ext.deprecated
+			keywords: ext.keywords
 		}));
 	}
 
@@ -454,70 +316,37 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		}
 	}
 
-	/**
-	 * Enhanced item click handler that supports remote extensions
-	 */
 	private async _handleItemClick(itemId: string): Promise<void> {
 		const item = this._items.find(i => i.id === itemId);
-		if (!item) return;
+		if (item && item.filePath) {
+			try {
+				// Set the selected extension ID
+				this._selectedExtensionId = itemId;
 
-		try {
-			// Set the selected extension ID
-			this._selectedExtensionId = itemId;
-
-			// Update the webview to show selection
-			if (this._view) {
-				this._view.webview.postMessage({
-					command: 'setSelection',
-					selectedExtensionId: itemId
-				});
-			}
-
-			// Handle remote extensions differently
-			if (item.source === 'openvsx') {
-				// For remote extensions, we need to get full details first
-				const remoteDetails = await this._storageProvider.getRemoteExtensionDetails(itemId);
-				if (remoteDetails) {
-					// Create a temporary VSIX-like object for the details view
-					const tempFilePath = `openvsx://${item.namespace}/${item.title}`;
-					await this._detailsProvider.showExtensionDetails(tempFilePath);
-				} else {
-					vscode.window.showErrorMessage('Failed to load extension details from OpenVSX');
+				// Update the webview to show selection
+				if (this._view) {
+					this._view.webview.postMessage({
+						command: 'setSelection',
+						selectedExtensionId: itemId
+					});
 				}
-			} else {
-				// Local extension - use existing logic
-				if (item.filePath) {
-					await this._detailsProvider.showExtensionDetails(item.filePath);
-				}
+
+				// Use the updated details provider that creates new windows
+				await this._detailsProvider.showExtensionDetails(item.filePath);
+			} catch (error) {
+				console.error('Error showing extension details:', error);
+				vscode.window.showErrorMessage(`Error showing extension details: ${error}`);
 			}
-		} catch (error) {
-			console.error('Error showing extension details:', error);
-			vscode.window.showErrorMessage(`Error showing extension details: ${error}`);
 		}
 	}
 
-	/**
-	 * Enhanced install handler for both local and remote extensions
-	 */
 	private async _installExtension(itemId: string): Promise<void> {
-		const item = this._items.find(i => i.id === itemId);
-		if (!item) return;
-
-		const extension = item.source === 'local' 
-			? this._storageProvider.getExtensionById(itemId)
-			: await this._storageProvider.getRemoteExtensionDetails(itemId);
-		
+		const extension = this._storageProvider.getExtensionById(itemId);
 		if (extension) {
-			let success: boolean;
-			
-			if (extension.source === 'openvsx') {
-				success = await this._storageProvider.installOpenVSXExtension(extension);
-			} else {
-				success = await this._storageProvider.installExtension(extension);
-			}
-
+			const success = await this._storageProvider.installExtension(extension);
 			if (success) {
 				// Refresh will happen automatically via onDidChange event
+				// But we can also send immediate feedback to webview
 				if (this._view) {
 					this._view.webview.postMessage({
 						command: 'installComplete'
@@ -545,6 +374,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 				const success = await this._storageProvider.uninstallExtension(itemId);
 				if (success) {
 					// Refresh will happen automatically via onDidChange event
+					// But we can also send immediate feedback to webview
 					if (this._view) {
 						this._view.webview.postMessage({
 							command: 'refresh'
@@ -573,23 +403,10 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
 	}
 
-	/**
-	 * Format download count for display
-	 */
-	private formatDownloadCount(count: number): string {
-		if (count < 1000) return count.toString();
-		if (count < 1000000) return Math.round(count / 100) / 10 + 'K';
-		return Math.round(count / 100000) / 10 + 'M';
-	}
-
-	/**
-	 * Enhanced sorting that considers remote extension metrics
-	 */
 	private _getSortedItems(): SidebarItem[] {
 		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
 		const sortBy = config.get<string>('sortBy', 'name');
 		const sortOrder = config.get<string>('sortOrder', 'ascending');
-		const preferLocal = config.get<boolean>('preferLocalExtensions', true);
 
 		const sortedItems = [...this._items].sort((a, b) => {
 			// Priority 1: Items with updates available (installed + hasUpdate)
@@ -606,13 +423,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 			if (aInstalledNoUpdate && !bInstalledNoUpdate && !bHasUpdate) return -1;
 			if (!aInstalledNoUpdate && bInstalledNoUpdate && !aHasUpdate) return 1;
 
-			// Priority 3: Local extensions over remote (when searching and preference enabled)
-			if (this._lastSearchQuery && preferLocal && a.source !== b.source) {
-				if (a.source === 'local' && b.source === 'openvsx') return -1;
-				if (a.source === 'openvsx' && b.source === 'local') return 1;
-			}
-
-			// Priority 4: Not installed items
+			// Priority 3: Not installed items
 			if (!a.isInstalled && b.isInstalled) return 1;
 			if (a.isInstalled && !b.isInstalled) return -1;
 
@@ -642,25 +453,6 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 						comparison = this.compareVersions(a.version, b.version);
 					}
 					break;
-				case 'downloads':
-					// Sort by download count for remote extensions
-					if (a.source === 'openvsx' && b.source === 'openvsx') {
-						comparison = (b.downloadCount || 0) - (a.downloadCount || 0);
-					} else {
-						comparison = a.title.localeCompare(b.title);
-					}
-					break;
-				case 'rating':
-					// Sort by rating for remote extensions
-					if (a.source === 'openvsx' && b.source === 'openvsx') {
-						comparison = (b.rating || 0) - (a.rating || 0);
-					} else {
-						comparison = a.title.localeCompare(b.title);
-					}
-					break;
-				case 'relevance':
-					// For search results, maintain the order from unified search
-					return 0;
 				default:
 					comparison = a.title.localeCompare(b.title);
 			}
@@ -699,15 +491,12 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
 		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
 		const showFileSize = config.get<boolean>('showFileSize', false);
 		const showLastModified = config.get<boolean>('showLastModified', false);
-		const showDownloadCount = config.get<boolean>('showDownloadCount', true);
-		const showRating = config.get<boolean>('showRating', true);
-		const showSourceIndicators = config.get<boolean>('showSourceIndicators', true);
 
 		return `<!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource}; connect-src https://open-vsx.org;">
+				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource};">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <link href="${styleResetUri}" rel="stylesheet">
                 <link href="${styleVSCodeUri}" rel="stylesheet">
@@ -718,12 +507,7 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
             <body>
                 <div class="container">
                     <div class="search-container">
-                        <input type="text" id="search-input" placeholder="Search local and OpenVSX extensions..." />
-                        <div class="search-info">
-                            <span class="search-hint">Search includes both local .vsix files and OpenVSX registry</span>
-                            ${this._items.some(item => item.source === 'openvsx') ? 
-								'<div class="remote-indicator"><span class="codicon codicon-cloud"></span> Showing remote extensions</div>' : ''}
-                        </div>
+                        <input type="text" id="search-input" placeholder="Search Extensions in Private Marketplace" />
                     </div>
                     
                     <div class="items-container">
@@ -732,11 +516,11 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
                                 <div class="codicon codicon-folder-opened"></div>
                                 <div>No extensions found</div>
                                 <div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">
-                                    Configure directories in settings or search OpenVSX registry
+                                    Configure directories in settings or click the + button to add directories
                                 </div>
                             </div>
                         ` : this._getSortedItems().map(item => `
-                            <div class="item ${item.isInstalled ? 'installed' : 'not-installed'} ${item.source === 'openvsx' ? 'remote-extension' : 'local-extension'} ${this._selectedExtensionId === item.id ? 'selected' : ''}" data-item-id="${item.id}" data-namespace="${item.namespace || ''}" tabindex="0">
+                            <div class="item ${item.isInstalled ? 'installed' : 'not-installed'} ${this._selectedExtensionId === item.id ? 'selected' : ''}" data-item-id="${item.id}" tabindex="0">
                                 <div class="item-icon-container">
                                     <div class="item-main-icon">
                                         ${item.icon ? `
@@ -752,38 +536,19 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
                                             <span class="codicon codicon-arrow-up"></span>
                                         </div>
                                     ` : ''}
-                                    ${showSourceIndicators ? (item.source === 'openvsx' ? `
-                                        <div class="source-badge remote-badge" title="OpenVSX Registry">
-                                            <span class="codicon codicon-cloud"></span>
-                                        </div>
-                                    ` : `
-                                        <div class="source-badge local-badge" title="Local Extension">
-                                            <span class="codicon codicon-file"></span>
-                                        </div>
-                                    `) : ''}
-                                    ${item.verified ? `
-                                        <div class="verified-badge" title="Verified Publisher">
-                                            <span class="codicon codicon-verified"></span>
-                                        </div>
-                                    ` : ''}
                                 </div>
                                 <div class="item-content">
                                     <!-- Row 1: Title -->
                                     <div class="item-header">
-                                        <div class="item-title">
-                                            ${item.title}
-                                            ${item.deprecated ? '<span class="deprecated-tag">DEPRECATED</span>' : ''}
-                                        </div>
+                                        <div class="item-title">${item.title}</div>
                                         ${item.isInstalled ? `
                                             <div class="item-actions">
                                                 <button class="action-btn toggle-status-btn" title="Toggle Status">
                                                     <span class="codicon codicon-circle-filled"></span>
                                                 </button>
-                                                ${item.source === 'local' ? `
-                                                    <button class="action-btn delete-btn" title="Uninstall">
-                                                        <span class="codicon codicon-trash"></span>
-                                                    </button>
-                                                ` : ''}
+                                                <button class="action-btn delete-btn" title="Uninstall">
+                                                    <span class="codicon codicon-trash"></span>
+                                                </button>
                                             </div>
                                         ` : `
                                             <div class="item-actions" style="display: none;">
@@ -801,18 +566,6 @@ export class PrivateExtensionsSidebarProvider implements vscode.WebviewViewProvi
                                                 <span class="author-name">${item.author}</span>
                                                 ${item.version ? `<span class="version">v${item.version}</span>` : ''}
                                             </div>
-                                            ${item.source === 'openvsx' && showDownloadCount && item.downloadCount ? `
-                                                <div class="download-info">
-                                                    <span class="codicon codicon-cloud-download"></span>
-                                                    <span class="download-count">${this.formatDownloadCount(item.downloadCount)}</span>
-                                                </div>
-                                            ` : ''}
-                                            ${item.source === 'openvsx' && showRating && item.rating ? `
-                                                <div class="rating-info">
-                                                    <span class="codicon codicon-star-full"></span>
-                                                    <span class="rating">${item.rating.toFixed(1)}</span>
-                                                </div>
-                                            ` : ''}
                                             ${showFileSize && item.fileSize ? `
                                                 <div class="file-info">
                                                     <span class="file-size">${this.formatFileSize(item.fileSize)}</span>

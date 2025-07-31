@@ -16,7 +16,6 @@ body {
 	flex-direction: column;
 }
 
-/* Search container enhancements */
 .search-container {
 	padding: 8px 16px;
 	border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
@@ -42,53 +41,6 @@ body {
 
 #search-input::placeholder {
 	color: var(--vscode-input-placeholderForeground);
-}
-
-.search-info {
-	margin-top: 6px;
-	font-size: 11px;
-	color: var(--vscode-descriptionForeground);
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 4px;
-}
-
-.search-hint {
-	opacity: 0.8;
-}
-
-.search-results-info {
-	color: var(--vscode-textLink-foreground);
-	font-weight: 500;
-}
-
-.remote-indicator {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	color: var(--vscode-charts-blue);
-	font-size: 10px;
-	padding: 2px 6px;
-	background-color: rgba(0, 123, 255, 0.1);
-	border-radius: 10px;
-}
-
-.keyboard-hints {
-	margin-top: 4px;
-	display: flex;
-	gap: 8px;
-	flex-wrap: wrap;
-	font-size: 10px;
-	opacity: 0.6;
-}
-
-.keyboard-hints .hint {
-	padding: 1px 4px;
-	background-color: var(--vscode-textBlockQuote-background);
-	border-radius: 2px;
-	font-family: monospace;
 }
 
 .items-container {
@@ -206,81 +158,6 @@ body {
 	justify-content: center;
 	font-size: 10px;
 	border: 2px solid var(--vscode-sideBar-background);
-}
-
-/* Source badges for extensions */
-.source-badge {
-	position: absolute;
-	bottom: -2px;
-	left: -2px;
-	width: 14px;
-	height: 14px;
-	border-radius: 50%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 8px;
-	border: 2px solid var(--vscode-sideBar-background);
-	z-index: 2;
-}
-
-.source-badge.local-badge {
-	background-color: var(--vscode-charts-green);
-	color: white;
-}
-
-.source-badge.remote-badge {
-	background-color: var(--vscode-charts-blue);
-	color: white;
-}
-
-.verified-badge {
-	position: absolute;
-	top: -2px;
-	left: -2px;
-	width: 14px;
-	height: 14px;
-	background-color: var(--vscode-charts-green);
-	color: white;
-	border-radius: 50%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 8px;
-	border: 2px solid var(--vscode-sideBar-background);
-	z-index: 3;
-}
-
-/* Remote extension styling */
-.item.remote-extension {
-	position: relative;
-}
-
-.item.remote-extension::before {
-	content: '';
-	position: absolute;
-	left: 0;
-	top: 0;
-	bottom: 0;
-	width: 3px;
-	background: linear-gradient(
-		to bottom,
-		var(--vscode-charts-blue),
-		rgba(0, 123, 255, 0.3)
-	);
-	border-radius: 0 2px 2px 0;
-}
-
-.item.local-extension::before {
-	content: '';
-	position: absolute;
-	left: 0;
-	top: 0;
-	bottom: 0;
-	width: 3px;
-	background: var(--vscode-charts-green);
-	border-radius: 0 2px 2px 0;
-	opacity: 0.7;
 }
 
 /* Content column - second column with 3 rows */
@@ -420,30 +297,6 @@ body {
 	flex-shrink: 0;
 }
 
-/* Extension metadata enhancements */
-.download-info,
-.rating-info {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	font-size: 10px;
-	color: var(--vscode-descriptionForeground);
-}
-
-.download-info .codicon,
-.rating-info .codicon {
-	font-size: 10px;
-}
-
-.download-count {
-	font-weight: 500;
-}
-
-.rating {
-	font-weight: 500;
-	color: var(--vscode-charts-orange);
-}
-
 .file-info {
 	display: flex;
 	align-items: center;
@@ -455,27 +308,6 @@ body {
 .file-size,
 .last-modified {
 	color: var(--vscode-descriptionForeground);
-}
-
-/* Deprecated extension styling */
-.deprecated-tag {
-	background-color: var(--vscode-errorForeground);
-	color: var(--vscode-editor-background);
-	padding: 1px 4px;
-	border-radius: 2px;
-	font-size: 9px;
-	font-weight: 600;
-	margin-left: 6px;
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
-}
-
-.item.deprecated {
-	opacity: 0.7;
-}
-
-.item.deprecated .item-title {
-	text-decoration: line-through;
 }
 
 .install-btn,
@@ -515,19 +347,6 @@ body {
 
 .update-btn:hover {
 	background-color: var(--vscode-badge-background);
-	opacity: 0.9;
-}
-
-/* Enhanced install buttons for remote extensions */
-.install-btn.downloading,
-.update-btn.downloading {
-	background-color: var(--vscode-charts-blue);
-	color: white;
-}
-
-.install-btn.downloading:hover,
-.update-btn.downloading:hover {
-	background-color: var(--vscode-charts-blue);
 	opacity: 0.9;
 }
 
@@ -598,50 +417,6 @@ body {
 	line-height: 1.4;
 }
 
-/* Enhanced empty state */
-.empty-action-btn {
-	background-color: var(--vscode-button-background);
-	color: var(--vscode-button-foreground);
-	border: none;
-	padding: 6px 12px;
-	border-radius: 2px;
-	font-size: 12px;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin: 0 auto;
-	transition: background-color 0.2s;
-}
-
-.empty-action-btn:hover {
-	background-color: var(--vscode-button-hoverBackground);
-}
-
-/* Searching state */
-.searching-state {
-	text-align: center;
-	padding: 30px 20px;
-	color: var(--vscode-descriptionForeground);
-}
-
-.searching-state .codicon {
-	font-size: 32px;
-	margin-bottom: 12px;
-	color: var(--vscode-charts-blue);
-}
-
-.searching-state div:first-child {
-	margin-bottom: 8px;
-}
-
-.searching-state div:last-child {
-	font-size: 11px;
-	margin-top: 4px;
-	opacity: 0.7;
-	line-height: 1.4;
-}
-
 /* Loading state */
 .loading {
 	text-align: center;
@@ -671,149 +446,6 @@ body {
 	border-left: 3px solid var(--vscode-focusBorder) !important;
 }
 
-/* Toast notifications */
-.toast {
-	position: fixed;
-	top: 10px;
-	right: 10px;
-	background: var(--vscode-notifications-background);
-	color: var(--vscode-notifications-foreground);
-	border: 1px solid var(--vscode-notifications-border);
-	border-radius: 4px;
-	padding: 8px 12px;
-	font-size: 12px;
-	z-index: 1000;
-	opacity: 0;
-	transition: opacity 0.3s ease;
-	max-width: 300px;
-	word-wrap: break-word;
-}
-
-.toast.visible {
-	opacity: 1;
-}
-
-.toast.error {
-	border-color: var(--vscode-errorForeground);
-	color: var(--vscode-errorForeground);
-	background-color: var(--vscode-inputValidation-errorBackground);
-}
-
-.toast.success {
-	border-color: var(--vscode-charts-green);
-	color: var(--vscode-charts-green);
-}
-
-/* Context menu */
-.context-menu {
-	position: fixed;
-	background: var(--vscode-menu-background);
-	border: 1px solid var(--vscode-menu-border);
-	border-radius: 4px;
-	padding: 4px 0;
-	z-index: 1000;
-	min-width: 150px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.context-menu-item {
-	padding: 6px 12px;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 12px;
-	color: var(--vscode-menu-foreground);
-	background-color: transparent;
-	transition: background-color 0.1s ease;
-}
-
-.context-menu-item:hover {
-	background-color: var(--vscode-menu-selectionBackground);
-}
-
-/* Enhanced context menu for remote extensions */
-.context-menu-item.remote-action {
-	color: var(--vscode-charts-blue);
-}
-
-.context-menu-item.remote-action:hover {
-	background-color: rgba(0, 123, 255, 0.1);
-}
-
-/* Accessibility improvements */
-.item:focus-visible {
-	outline: 2px solid var(--vscode-focusBorder);
-	outline-offset: -2px;
-}
-
-.action-btn:focus-visible,
-.install-btn:focus-visible,
-.update-btn:focus-visible {
-	outline: 1px solid var(--vscode-focusBorder);
-	outline-offset: 1px;
-}
-
-.search-input:focus-visible {
-	outline: 2px solid var(--vscode-focusBorder);
-	outline-offset: -2px;
-}
-
-/* Hover effects for better UX */
-.item:hover .item-title {
-	color: var(--vscode-list-hoverForeground);
-}
-
-.item:hover .item-description {
-	color: var(--vscode-foreground);
-}
-
-/* Animation for new items */
-.item.new-item {
-	animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-	from {
-		opacity: 0;
-		transform: translateX(-10px);
-	}
-	to {
-		opacity: 1;
-		transform: translateX(0);
-	}
-}
-
-/* Animation for new remote results */
-.item.remote-extension.new-result {
-	animation: slideInFromRight 0.3s ease-out;
-}
-
-@keyframes slideInFromRight {
-	from {
-		opacity: 0;
-		transform: translateX(20px);
-	}
-	to {
-		opacity: 1;
-		transform: translateX(0);
-	}
-}
-
-/* Spin animation for loading states */
-.spin {
-	animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-	from {
-		transform: rotate(0deg);
-	}
-	to {
-		transform: rotate(360deg);
-	}
-}
-
 /* Responsive adjustments - hide icon column when too narrow */
 @media (max-width: 250px) {
 	.item-icon-container {
@@ -823,23 +455,6 @@ body {
 	.item {
 		gap: 0;
 		padding: 12px 12px;
-	}
-	
-	.source-badge {
-		display: none;
-	}
-	
-	.download-info,
-	.rating-info {
-		display: none;
-	}
-	
-	.keyboard-hints {
-		display: none;
-	}
-	
-	.remote-indicator {
-		display: none;
 	}
 }
 
@@ -918,14 +533,141 @@ body {
 	}
 }
 
-/* Print styles (hide interactive elements) */
-@media print {
-	.search-container,
-	.install-btn,
-	.update-btn,
-	.action-btn,
-	.source-badge,
-	.keyboard-hints {
-		display: none !important;
+/* Accessibility improvements */
+.item:focus-visible {
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: -2px;
+}
+
+.action-btn:focus-visible,
+.install-btn:focus-visible,
+.update-btn:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+/* Hover effects for better UX */
+.item:hover .item-title {
+	color: var(--vscode-list-hoverForeground);
+}
+
+.item:hover .item-description {
+	color: var(--vscode-foreground);
+}
+
+/* Animation for new items */
+.item.new-item {
+	animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+	from {
+		opacity: 0;
+		transform: translateX(-10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+/* Toast notifications */
+.toast {
+	position: fixed;
+	top: 10px;
+	right: 10px;
+	background: var(--vscode-notifications-background);
+	color: var(--vscode-notifications-foreground);
+	border: 1px solid var(--vscode-notifications-border);
+	border-radius: 4px;
+	padding: 8px 12px;
+	font-size: 12px;
+	z-index: 1000;
+	opacity: 0;
+	transition: opacity 0.3s ease;
+	max-width: 300px;
+	word-wrap: break-word;
+}
+
+.toast.visible {
+	opacity: 1;
+}
+
+.toast.error {
+	border-color: var(--vscode-errorForeground);
+	color: var(--vscode-errorForeground);
+	background-color: var(--vscode-inputValidation-errorBackground);
+}
+
+.toast.success {
+	border-color: var(--vscode-charts-green);
+	color: var(--vscode-charts-green);
+}
+
+/* Context menu */
+.context-menu {
+	position: fixed;
+	background: var(--vscode-menu-background);
+	border: 1px solid var(--vscode-menu-border);
+	border-radius: 4px;
+	padding: 4px 0;
+	z-index: 1000;
+	min-width: 150px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.context-menu-item {
+	padding: 6px 12px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--vscode-menu-foreground);
+	background-color: transparent;
+	transition: background-color 0.1s ease;
+}
+
+.context-menu-item:hover {
+	background-color: var(--vscode-menu-selectionBackground);
+}
+
+/* Drop overlay */
+.drop-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 123, 255, 0.1);
+	border: 2px dashed var(--vscode-focusBorder);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 999;
+	font-size: 16px;
+	color: var(--vscode-focusBorder);
+}
+
+.drop-overlay-content {
+	text-align: center;
+}
+
+.drop-overlay-icon {
+	font-size: 48px;
+	margin-bottom: 8px;
+}
+
+/* Spin animation for loading states */
+.spin {
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
 	}
 }
