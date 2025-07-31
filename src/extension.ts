@@ -23,6 +23,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		container = new Container();
 		await container.initialize(context);
 
+		// Make container globally accessible for webview communication
+		(global as any).privateExtensionContainer = container;
+
 		// Register core services
 		extensionService = container.get<ExtensionService>('ExtensionService');
 		sidebarController = container.get<SidebarController>('SidebarController');
@@ -110,6 +113,9 @@ export function deactivate(): void {
 		detailsController?.dispose();
 		commandHandler?.dispose();
 		container?.dispose();
+
+		// Clean up global reference
+		delete (global as any).privateExtensionContainer;
 
 		logger.info('Private Extension Manager deactivated successfully');
 	} catch (error: any) {

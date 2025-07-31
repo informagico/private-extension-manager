@@ -58,8 +58,8 @@ export class VsixParser implements IVsixParser {
 			// Extract and parse manifest
 			const manifestData = await this.extractAndParseManifest();
 
-			// Build extension metadata
-			const metadata = this.buildExtensionMetadata(packageJsonData, manifestData);
+			// Build extension metadata (now async)
+			const metadata = await this.buildExtensionMetadata(packageJsonData, manifestData, filePath);
 
 			// Extract additional content
 			const readme = await this.extractReadme(filePath);
@@ -317,7 +317,7 @@ export class VsixParser implements IVsixParser {
 		return this.manifestParser.parse(text);
 	}
 
-	private buildExtensionMetadata(packageJson: any, manifest: any): ExtensionMetadata {
+	private async buildExtensionMetadata(packageJson: any, manifest: any, filePath: FilePath): Promise<ExtensionMetadata> {
 		const builder = new ExtensionMetadataBuilder();
 
 		// Use package.json as primary source, manifest as fallback
@@ -327,7 +327,21 @@ export class VsixParser implements IVsixParser {
 			.author(this.extractAuthor(packageJson) || manifest?.publisher || 'Unknown')
 			.publisher(packageJson.publisher || manifest?.publisher || 'Unknown');
 
-		if (packageJson.icon) builder.icon(packageJson.icon);
+		// Handle icon extraction and conversion to data URL
+		if (packageJson.icon) {
+			try {
+				const iconBuffer = await this.extractIcon(filePath, packageJson.icon);
+				if (iconBuffer) {
+					const iconExtension = packageJson.icon.split('.').pop()?.toLowerCase() || 'png';
+					const mimeType = this.getMimeType(iconExtension);
+					const iconDataUrl = `data:${mimeType};base64,${iconBuffer.toString('base64')}`;
+					builder.icon(iconDataUrl);
+				}
+			} catch (error) {
+				this.logger.warn(`Failed to extract icon: ${packageJson.icon}`, { error });
+			}
+		}
+
 		if (packageJson.categories) builder.categories(packageJson.categories);
 		if (packageJson.keywords) builder.keywords(packageJson.keywords);
 		if (packageJson.repository) {
@@ -341,6 +355,20 @@ export class VsixParser implements IVsixParser {
 
 		return builder.build();
 	}
+
+	private getMimeType(extension: string): string {
+		const mimeTypes: { [key: string]: string } = {
+			'png': 'image/png',
+			'jpg': 'image/jpeg',
+			'jpeg': 'image/jpeg',
+			'gif': 'image/gif',
+			'svg': 'image/svg+xml',
+			'webp': 'image/webp',
+			'ico': 'image/x-icon'
+		};
+		return mimeTypes[extension] || 'image/png';
+	}
+
 
 	private extractAuthor(packageJson: any): string | undefined {
 		if (typeof packageJson.author === 'string') {

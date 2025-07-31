@@ -48,6 +48,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		switch (message.command) {
 			case 'itemClicked':
 				this.controller.handleExtensionSelect(message.itemId);
+				await this.openExtensionDetails(message.itemId);
 				break;
 			case 'installItem':
 				await this.controller.handleInstall(message.itemId);
@@ -69,6 +70,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			case 'search':
 				await this.controller.handleSearch(message.query || '');
 				break;
+		}
+	}
+
+	private async openExtensionDetails(extensionId: string): Promise<void> {
+		try {
+			// Get the details controller from the container
+			const container = (global as any).privateExtensionContainer;
+			if (container) {
+				const detailsController = container.get('DetailsController');
+
+				// Find the extension by ID
+				const extensionService = container.get('ExtensionService');
+				const extensions = await extensionService.getAllExtensions();
+				const extension = extensions.find(ext => ext.id.value === extensionId);
+
+				if (extension) {
+					await detailsController.showExtensionDetails(extension.filePath.value);
+				}
+			}
+		} catch (error) {
+			console.error('Failed to open extension details:', error);
+			vscode.window.showErrorMessage('Failed to open extension details');
 		}
 	}
 
