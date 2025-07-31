@@ -160,7 +160,8 @@
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.35",
-    "marked": "^9.1.6"
+    "marked": "^9.1.6",
+    "reflect-metadata": "^0.1.13"
   },
   "devDependencies": {
     "@types/node": "16.x",

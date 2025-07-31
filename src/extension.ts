@@ -1,179 +1,118 @@
 import * as vscode from 'vscode';
-import { PrivateExtensionsSidebarProvider } from './sidebarProvider';
+import 'reflect-metadata';
+import { Container } from './shared/di/Container';
+import { ExtensionService } from './core/application/services/ExtensionService';
+import { SidebarController } from './presentation/webview/controllers/SidebarController';
+import { DetailsController } from './presentation/webview/controllers/DetailsController';
+import { CommandHandler } from './presentation/commands/CommandHandler';
+import { Logger } from './shared/utils/Logger';
+import { Configuration } from './config/Configuration';
 
-export function activate(context: vscode.ExtensionContext) {
-	console.log('Private Extensions Manager is now active!');
+let container: Container;
+let extensionService: ExtensionService;
+let sidebarController: SidebarController;
+let detailsController: DetailsController;
+let commandHandler: CommandHandler;
 
-	// Register the webview provider
-	const sidebarProvider = new PrivateExtensionsSidebarProvider(context.extensionUri, context);
-	context.subscriptions.push(
-		vscode.window.registerWebviewViewProvider(PrivateExtensionsSidebarProvider.viewType, sidebarProvider)
-	);
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	const logger = new Logger('Extension');
+	logger.info('Activating Private Extension Manager');
 
-	// Load extensions immediately at startup
-	loadExtensionsAtStartup(sidebarProvider, context);
+	try {
+		// Initialize dependency injection container
+		container = new Container();
+		await container.initialize(context);
 
-	// Register commands
-	context.subscriptions.push(
-		vscode.commands.registerCommand('privateExtensionsSidebar.refresh', async () => {
-			await sidebarProvider.scanDirectories();
-		})
-	);
+		// Register core services
+		extensionService = container.get<ExtensionService>('ExtensionService');
+		sidebarController = container.get<SidebarController>('SidebarController');
+		detailsController = container.get<DetailsController>('DetailsController');
+		commandHandler = container.get<CommandHandler>('CommandHandler');
 
-	context.subscriptions.push(
-		vscode.commands.registerCommand('privateExtensionsSidebar.addItem', async () => {
-			await sidebarProvider.addDirectory();
-		})
-	);
+		// Register VS Code providers and commands
+		await registerProviders(context);
+		await registerCommands(context);
 
-	context.subscriptions.push(
-		vscode.commands.registerCommand('privateExtensionsSidebar.openSettings', () => {
-			vscode.commands.executeCommand('workbench.action.openSettings', 'privateExtensionsSidebar');
-		})
-	);
+		// Initialize controllers
+		await sidebarController.initialize();
+		await detailsController.initialize();
 
-	// Register additional commands for context menu actions
-	context.subscriptions.push(
-		vscode.commands.registerCommand('privateExtensionsSidebar.configureDirectories', async () => {
-			const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
-			const currentDirs = config.get<string[]>('vsixDirectories', []);
+		// Load extensions at startup if configured
+		const config = container.get<Configuration>('Configuration');
+		if (config.loadAtStartup) {
+			await loadExtensionsAtStartup();
+		}
 
-			const result = await vscode.window.showInputBox({
-				prompt: 'Enter directory paths separated by commas',
-				value: currentDirs.join(', '),
-				placeHolder: '~/extensions, /path/to/extensions, C:\\Extensions'
-			});
-
-			if (result !== undefined) {
-				const newDirs = result.split(',').map(dir => dir.trim()).filter(dir => dir.length > 0);
-				await config.update('vsixDirectories', newDirs, vscode.ConfigurationTarget.Global);
-
-				vscode.window.showInformationMessage(
-					`Updated VSIX directories. Found ${newDirs.length} director${newDirs.length === 1 ? 'y' : 'ies'}.`
-				);
-
-				await sidebarProvider.scanDirectories();
-			}
-		})
-	);
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand('privateExtensionsSidebar.clearCache', async () => {
-			const confirm = await vscode.window.showWarningMessage(
-				'This will clear the extension cache and rescan all directories. Continue?',
-				{ modal: true },
-				'Clear Cache'
-			);
-
-			if (confirm === 'Clear Cache') {
-				await sidebarProvider.scanDirectories();
-				vscode.window.showInformationMessage('Extension cache cleared and directories rescanned.');
-			}
-		})
-	);
-
-	// Show initial setup message if no directories are configured
-	const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
-	const directories = config.get<string[]>('vsixDirectories', []);
-
-	if (directories.length === 0) {
-		vscode.window.showInformationMessage(
-			'Welcome to Private Extensions Manager! Configure directories to scan for .vsix files.',
-			'Configure Directories',
-			'Open Settings'
-		).then(selection => {
-			if (selection === 'Configure Directories') {
-				vscode.commands.executeCommand('privateExtensionsSidebar.configureDirectories');
-			} else if (selection === 'Open Settings') {
-				vscode.commands.executeCommand('workbench.action.openSettings', 'privateExtensionsSidebar');
-			}
-		});
+		logger.info('Private Extension Manager activated successfully');
+	} catch (error: any) {
+		logger.error('Failed to activate extension', { error });
+		vscode.window.showErrorMessage(`Failed to activate Private Extension Manager: ${error?.message || 'Unknown error'}`);
 	}
-
-	// Dispose the sidebar provider when extension is deactivated
-	context.subscriptions.push({
-		dispose: () => sidebarProvider.dispose()
-	});
 }
 
-/**
- * Load extensions at startup without waiting for sidebar activation
- */
-async function loadExtensionsAtStartup(sidebarProvider: PrivateExtensionsSidebarProvider, context: vscode.ExtensionContext) {
+async function registerProviders(context: vscode.ExtensionContext): Promise<void> {
+	const sidebarProvider = container.get<vscode.WebviewViewProvider>('SidebarProvider');
+
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider('privateExtensionsSidebar.sidebarView', sidebarProvider)
+	);
+}
+
+async function registerCommands(context: vscode.ExtensionContext): Promise<void> {
+	const commands = [
+		'privateExtensionsSidebar.refresh',
+		'privateExtensionsSidebar.addItem',
+		'privateExtensionsSidebar.openSettings',
+		'privateExtensionsSidebar.configureDirectories',
+		'privateExtensionsSidebar.clearCache'
+	];
+
+	for (const command of commands) {
+		context.subscriptions.push(
+			vscode.commands.registerCommand(command, (...args) =>
+				commandHandler.handleCommand(command, ...args)
+			)
+		);
+	}
+}
+
+async function loadExtensionsAtStartup(): Promise<void> {
+	const logger = new Logger('Startup');
+
 	try {
-		const config = vscode.workspace.getConfiguration('privateExtensionsSidebar');
-		const directories = config.get<string[]>('vsixDirectories', []);
-		
-		// Only scan if directories are configured
-		if (directories.length === 0) {
-			console.log('Extension: No VSIX directories configured, skipping startup scan');
-			return;
-		}
-
-		// Check if startup loading is enabled
-		const loadAtStartup = config.get<boolean>('loadAtStartup', true);
-		if (!loadAtStartup) {
-			console.log('Extension: Startup loading disabled, skipping startup scan');
-			return;
-		}
-
-		// Check if auto-scan is enabled
-		const autoScan = config.get<boolean>('autoScan', true);
-		if (!autoScan) {
-			console.log('Extension: Auto-scan disabled, skipping startup scan');
-			return;
-		}
-
-		console.log('Extension: Starting extension scan at startup...');
-		
-		// Add a small delay to ensure everything is properly initialized
-		await new Promise(resolve => setTimeout(resolve, 500));
-		
-		// Show progress notification for startup scan
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
 			title: "Loading private extensions",
 			cancellable: false
 		}, async (progress) => {
 			progress.report({ increment: 0, message: "Scanning directories..." });
-			
-			try {
-				console.log('Extension: About to call scanDirectoriesInBackground...');
-				
-				// Add timeout protection
-				const scanPromise = sidebarProvider.scanDirectoriesInBackground();
-				const timeoutPromise = new Promise<void>((_, reject) => {
-					setTimeout(() => reject(new Error('Scan timeout after 30 seconds')), 30000);
-				});
-				
-				await Promise.race([scanPromise, timeoutPromise]);
-				
-				console.log('Extension: scanDirectoriesInBackground completed successfully');
-				progress.report({ increment: 100, message: "Complete" });
-				
-				// Give a moment for the scan to complete
-				await new Promise(resolve => setTimeout(resolve, 100));
-				
-				// Optional: Show completion message
-				const extensionCount = sidebarProvider.getExtensionCount();
-				console.log(`Extension: Final extension count: ${extensionCount}`);
-				if (extensionCount > 0) {
-					console.log(`Extension: Loaded ${extensionCount} private extensions at startup`);
-					// Uncomment next line for a notification:
-					// vscode.window.showInformationMessage(`Loaded ${extensionCount} private extension${extensionCount === 1 ? '' : 's'}`);
-				}
-			} catch (error) {
-				console.error('Extension: Error during startup extension scan:', error);
-				progress.report({ increment: 100, message: "Error occurred" });
-				vscode.window.showWarningMessage(`Failed to scan extensions at startup: ${error}`);
+
+			const extensions = await extensionService.refreshExtensions();
+
+			progress.report({ increment: 100, message: "Complete" });
+
+			if (extensions.length > 0) {
+				logger.info(`Loaded ${extensions.length} private extensions at startup`);
 			}
 		});
-		
-		console.log('Extension: Startup scan process completed');
-		
-	} catch (error) {
-		console.error('Extension: Error in loadExtensionsAtStartup:', error);
+	} catch (error: any) {
+		logger.error('Failed to load extensions at startup', { error });
+		vscode.window.showWarningMessage(`Failed to load extensions: ${error?.message || 'Unknown error'}`);
 	}
 }
 
-export function deactivate() { }
+export function deactivate(): void {
+	const logger = new Logger('Extension');
+	logger.info('Deactivating Private Extension Manager');
+
+	try {
+		sidebarController?.dispose();
+		detailsController?.dispose();
+		commandHandler?.dispose();
+		container?.dispose();
+
+		logger.info('Private Extension Manager deactivated successfully');
+	} catch (error: any) {
+		logger.error('Error during deactivation', { error });
+	}
+}
